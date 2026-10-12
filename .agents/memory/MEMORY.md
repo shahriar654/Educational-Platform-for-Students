@@ -1,0 +1,1 @@
+- [Platform audience and scope](platform-audience.md) — daily class-note photo sharing for NDC Humanities G–L across seven specified subjects.
