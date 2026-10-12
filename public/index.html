@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f7f8f6" />
+    <meta
+      name="description"
+      content="Find today's class notes and share your handwritten study notes with NDC Humanities G-L."
+    />
+    <title>NDC Humanities G-L — Class notes, together</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css?v=20261012" />
+    <script src="/app.js?v=20261012" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="NDC Humanities G-L home">
+        <span class="brand-mark"><span></span><span></span><span></span></span>
+        <span class="brand-copy">
+          <strong>NDC Humanities</strong>
+          <small>GROUP G–L · CLASS NOTES</small>
+        </span>
+      </a>
+      <nav class="top-nav" aria-label="Main navigation">
+        <a class="nav-link active" href="#notes">Study library</a>
+        <a class="nav-link" href="#how-it-works">How it works</a>
+      </nav>
+      <div class="top-actions">
+        <div id="user-area" class="user-area"></div>
+        <button class="button button-quiet" id="auth-open" type="button">Sign in</button>
+        <button class="button button-primary header-upload" id="header-upload" type="button">
+          <span class="button-icon" aria-hidden="true">＋</span> Share a note
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero-wrap" aria-labelledby="hero-title">
+        <div class="hero">
+          <div class="hero-content">
+            <span class="eyebrow"><span class="eyebrow-dot"></span> A LITTLE BETTER, EVERY CLASS</span>
+            <h1 id="hero-title">Good notes.<br /><span>Better together.</span></h1>
+            <p>
+              Find the notes you need, share what you’ve learned, and make every class count.
+            </p>
+            <div class="hero-actions">
+              <button class="button button-primary button-large" id="hero-upload" type="button">
+                <span aria-hidden="true">＋</span> Share your notes
+              </button>
+              <a class="text-link" href="#notes">Explore the library <span aria-hidden="true">↗</span></a>
+            </div>
+            <div class="hero-trust">
+              <div class="student-stack" aria-hidden="true">
+                <span>R</span><span>S</span><span>M</span><span>A</span>
+              </div>
+              <p><strong>Made by students, for students.</strong><br />Seven subjects, one shared study space.</p>
+            </div>
+          </div>
+          <div class="hero-art" aria-hidden="true">
+            <div class="hero-sun"></div>
+            <div class="hero-note hero-note-back">
+              <span class="note-back-chip"></span>
+              <div class="fake-lines">
+                <i></i><i></i><i></i><i></i><i></i><i></i>
+              </div>
+            </div>
+            <div class="hero-note hero-note-front">
+              <div class="note-heading">
+                <span class="note-pin"></span>
+                <span class="note-subject">TODAY’S CLASS</span>
+                <span class="note-date" id="hero-date">MON, OCT 12</span>
+              </div>
+              <div class="handwritten">Little steps,<br />big ideas.</div>
+              <span class="highlight-stroke"></span>
+              <div class="fake-lines front-lines">
+                <i></i><i></i><i></i><i></i>
+              </div>
+              <div class="note-footer"><span>Keep learning, together.</span><span>✳</span></div>
+            </div>
+            <span class="art-spark spark-one">✳</span>
+            <span class="art-spark spark-two">✷</span>
+            <div class="floating-tag"><span class="tag-check">✓</span> Shared with your class</div>
+          </div>
+        </div>
+        <div class="subject-ticker" aria-label="Subjects">
+          <span class="ticker-label">YOUR STUDY SPACE</span>
+          <span class="ticker-divider"></span>
+          <span><i class="subject-dot dot-bangla"></i> Bangla</span>
+          <span><i class="subject-dot dot-english"></i> English</span>
+          <span><i class="subject-dot dot-ict"></i> ICT</span>
+          <span><i class="subject-dot dot-economics"></i> Economics</span>
+          <span><i class="subject-dot dot-history"></i> History</span>
+          <span><i class="subject-dot dot-civics"></i> Civics</span>
+          <span><i class="subject-dot dot-geography"></i> Geography</span>
+        </div>
+      </section>
+
+      <section class="library-section" id="notes" aria-labelledby="library-title">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow section-eyebrow">THE SHARED STUDY LIBRARY</span>
+            <h2 id="library-title">Class notes, <span>all in one place.</span></h2>
+            <p class="section-intro">A little help from your classmates goes a long way.</p>
+          </div>
+          <div class="library-count"><span class="count-spark">✳</span><span id="note-count">Loading notes…</span></div>
+        </div>
+
+        <div class="library-toolbar">
+          <div class="toolbar-label"><span class="calendar-icon" aria-hidden="true">▦</span> Class day</div>
+          <div class="date-picker" id="date-picker" role="group" aria-label="Filter notes by class day"></div>
+          <button class="all-dates-button" id="all-dates" type="button">All days <span aria-hidden="true">↗</span></button>
+          <label class="search-box">
+            <span aria-hidden="true">⌕</span>
+            <input id="search-input" type="search" placeholder="Search notes…" maxlength="100" aria-label="Search notes" />
+            <kbd>/</kbd>
+          </label>
+        </div>
+
+        <div class="subject-toolbar" id="subject-picker" role="group" aria-label="Filter notes by subject"></div>
+
+        <div class="results-heading">
+          <div>
+            <h3 id="results-title">Today’s class notes</h3>
+            <p id="results-subtitle">A shared notebook, ready when you are.</p>
+          </div>
+          <button class="sort-label" id="clear-filters" type="button">Clear filters <span aria-hidden="true">×</span></button>
+        </div>
+        <div id="notes-grid" class="notes-grid" aria-live="polite"></div>
+      </section>
+
+      <section class="how-section" id="how-it-works">
+        <div class="how-copy">
+          <span class="eyebrow section-eyebrow">A SIMPLE WAY TO SHARE</span>
+          <h2>One class, a whole lot of <span>bright ideas.</span></h2>
+          <p>Snap a clear photo of your notebook and help a classmate see today’s lesson a little differently.</p>
+          <button class="button button-dark" id="how-upload" type="button">Add to the study library <span aria-hidden="true">↗</span></button>
+        </div>
+        <div class="steps">
+          <article class="step-card">
+            <span class="step-number">01</span><span class="step-illustration step-camera">◉</span>
+            <h3>Snap a page</h3><p>A clear phone photo is all you need. Handwritten notes welcome.</p>
+          </article>
+          <article class="step-card">
+            <span class="step-number">02</span><span class="step-illustration step-organize">▤</span>
+            <h3>Pick a subject</h3><p>Add a title and class date so it’s easy for others to find.</p>
+          </article>
+          <article class="step-card">
+            <span class="step-number">03</span><span class="step-illustration step-share">↗</span>
+            <h3>Share & study</h3><p>Your classmates can browse, read, and learn from your notes.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <a class="brand footer-brand" href="/">
+        <span class="brand-mark"><span></span><span></span><span></span></span>
+        <span class="brand-copy"><strong>NDC Humanities</strong><small>GROUP G–L · CLASS NOTES</small></span>
+      </a>
+      <p>Built on shared effort. Made for <strong>Group G–L.</strong></p>
+      <a href="#notes">Back to the library ↑</a>
+    </footer>
+
+    <dialog id="auth-dialog" class="modal">
+      <form class="modal-card" id="auth-form">
+        <button class="modal-close" type="button" data-close-modal="auth-dialog" aria-label="Close">×</button>
+        <span class="modal-mark">✳</span>
+        <p class="eyebrow section-eyebrow">WELCOME TO THE STUDY CIRCLE</p>
+        <h2 id="auth-title">Good to have you here.</h2>
+        <p class="modal-intro" id="auth-description">Sign in to share a page of your class notes.</p>
+        <div id="name-field" class="form-field is-hidden">
+          <label for="auth-name">Your name</label>
+          <input id="auth-name" name="name" type="text" autocomplete="name" maxlength="80" placeholder="e.g. Samira Rahman" />
+        </div>
+        <div class="form-field">
+          <label for="auth-email">Email address</label>
+          <input id="auth-email" name="email" type="email" autocomplete="email" required placeholder="you@example.com" />
+        </div>
+        <div class="form-field">
+          <label for="auth-password">Password</label>
+          <input id="auth-password" name="password" type="password" autocomplete="current-password" minlength="8" required placeholder="At least 8 characters" />
+        </div>
+        <p class="form-error" id="auth-error" role="alert"></p>
+        <button class="button button-primary modal-submit" id="auth-submit" type="submit">Sign in</button>
+        <p class="auth-switch" id="auth-switch"></p>
+        <div class="demo-login">
+          <strong>Just exploring?</strong>
+          <span>Demo student: <code>demo@ndcgl.edu.bd</code></span>
+          <span>Password: <code>NdcStudent2026!</code></span>
+          <button type="button" id="demo-fill">Use demo account <span aria-hidden="true">↗</span></button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="upload-dialog" class="modal">
+      <form class="modal-card upload-card" id="upload-form">
+        <button class="modal-close" type="button" data-close-modal="upload-dialog" aria-label="Close">×</button>
+        <span class="modal-mark upload-mark">↗</span>
+        <p class="eyebrow section-eyebrow">SHARE WHAT YOU LEARNED</p>
+        <h2>Pass your notes along.</h2>
+        <p class="modal-intro">Add one clear photo per subject for your class day.</p>
+        <div class="form-row">
+          <div class="form-field">
+            <label for="note-subject">Subject</label>
+            <select id="note-subject" name="subject" required></select>
+          </div>
+          <div class="form-field">
+            <label for="note-date">Class date</label>
+            <input id="note-date" name="lessonDate" type="date" required />
+          </div>
+        </div>
+        <div class="form-field">
+          <label for="note-title">Note title</label>
+          <input id="note-title" name="title" type="text" required minlength="3" maxlength="140" placeholder="e.g. Demand & supply curves" />
+        </div>
+        <div class="form-field">
+          <label for="note-caption">A little context <span class="optional-label">OPTIONAL</span></label>
+          <textarea id="note-caption" name="caption" rows="2" maxlength="1000" placeholder="What did you cover in class?"></textarea>
+        </div>
+        <div class="form-field">
+          <label for="note-photo">Photo of your notes</label>
+          <div class="photo-upload" id="photo-dropzone">
+            <input id="note-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" required />
+            <div class="upload-placeholder" id="upload-placeholder">
+              <span class="upload-icon">↑</span>
+              <strong>Choose a photo or drop one here</strong>
+              <small>JPG, PNG or WebP · Up to 8 MB</small>
+            </div>
+            <img class="photo-preview is-hidden" id="photo-preview" alt="Preview of your class note photo" />
+          </div>
+        </div>
+        <p class="form-error" id="upload-error" role="alert"></p>
+        <button class="button button-primary modal-submit" id="upload-submit" type="submit">Share with the class <span aria-hidden="true">↗</span></button>
+        <p class="form-footnote">Your name will appear so classmates know who shared it.</p>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

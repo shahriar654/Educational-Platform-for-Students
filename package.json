@@ -1,0 +1,30 @@
+{
+  "name": "ndc-humanities-gl",
+  "version": "1.0.0",
+  "description": "A shared class-notes library for NDC Humanities G-L.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shahriar654/Educational-Platform-for-Students.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/shahriar654/Educational-Platform-for-Students/issues"
+  },
+  "homepage": "https://github.com/shahriar654/Educational-Platform-for-Students#readme",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "connect-pg-simple": "^10.0.0",
+    "express": "^5.3.0",
+    "express-session": "^1.19.0",
+    "multer": "^2.4.0",
+    "pg": "^8.23.1"
+  }
+}
