@@ -24,6 +24,7 @@ const SUBJECTS = [
 const MAX_IMAGE_SIZE = 8 * 1024 * 1024;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const app = express();
+let databaseReady = Promise.resolve();
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_IMAGE_SIZE, files: 1 },
@@ -47,7 +48,11 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: "32kb" }));
+app.use("/api", (_req, _res, next) => {
+  databaseReady.then(() => next()).catch(next);
+});
 app.use(
+  "/api",
   session({
     name: "ndcgl.sid",
     secret: SESSION_SECRET,
@@ -479,15 +484,18 @@ app.use((error, _req, res, _next) => {
   res.status(500).json({ error: "Something went wrong. Please try again." });
 });
 
-async function start() {
-  await pool.query("SELECT 1");
-  await seedDemoData();
+function start() {
+  databaseReady = (async () => {
+    await pool.query("SELECT 1");
+    await seedDemoData();
+  })();
+  databaseReady.then(
+    () => console.log("Database initialization completed."),
+    (error) => console.error("Database initialization failed:", error.message),
+  );
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`NDC Humanities G-L is running on port ${PORT}.`);
   });
 }
 
-start().catch((error) => {
-  console.error("Could not start NDC Humanities G-L:", error.message);
-  process.exit(1);
-});
+start();
