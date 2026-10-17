@@ -1,0 +1,23 @@
+Please refactor our entire website application to be completely self-sufficient and independent of Replit's built-in database and publishing systems. 
+
+Here are the requirements for the updated architecture:
+
+1. DATABASE (TiDB PostgreSQL):
+   - Remove any local file databases, sqlite, or replit-db code.
+   - Switch our database layer to standard PostgreSQL using the 'pg' library (Node.js) or 'psycopg2/SQLAlchemy' (Python) depending on our current language runtime.
+   - Configure the application to initialize a database pool connecting directly to process.env.DATABASE_URL.
+   - Ensure the database initialization script creates a table named 'student_notes' if it does not exist, with columns for: id (Primary Key), student_name, subject, date_uploaded, and note_image_url (TEXT).
+
+2. IMAGE UPLOAD HANDLING (Cloudinary with Compression):
+   - Do not store raw student note photos locally on the server or as raw binary blobs in PostgreSQL.
+   - Install the official Cloudinary SDK. Initialize it using the credentials:
+     - process.env.CLOUDINARY_CLOUD_NAME
+     - process.env.CLOUDINARY_API_KEY
+     - process.env.CLOUDINARY_API_SECRET
+   - Modify the student submission route: When a student uploads a picture of their notes, send it immediately to Cloudinary using their automatic formatting and quality compression flags ('f_auto', 'q_auto'). 
+   - Wait for Cloudinary to return the secure web URL, then save that specific image string URL into our TiDB PostgreSQL table along with the note's text metadata.
+
+3. LIFETIME PUBLISHING COMPATIBILITY (Vercel Ready):
+   - Ensure all configuration settings use standard environment variables (process.env) instead of Replit's native system properties.
+   - Organize the codebase to be entirely compatible with serverless/stateless environments like Vercel. 
+   - Add a standard layout configuration file (like a 'vercel.json' if it's a Node.js project) or ensure our entry point file is named appropriately (e.g., 'index.js' or 'api/index.js') so Vercel can ingest and run this app forever directly from a GitHub repository.

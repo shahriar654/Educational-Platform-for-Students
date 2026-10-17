@@ -21,6 +21,7 @@
   "homepage": "https://github.com/shahriar654/Educational-Platform-for-Students#readme",
   "dependencies": {
     "bcryptjs": "^3.0.3",
+    "cloudinary": "^2.11.0",
     "connect-pg-simple": "^10.0.0",
     "express": "^5.3.0",
     "express-session": "^1.19.0",
