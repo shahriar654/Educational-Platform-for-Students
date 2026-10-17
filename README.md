@@ -4,18 +4,53 @@ A shared class-notes library for NDC Humanities Group G–L. Students can browse
 class notes by day, subject, and keyword; create an account; and share a photo
 of their notes with classmates.
 
-## Run on Replit
+The app runs as one Node.js web server and uses:
 
-The app runs as one Node.js web server:
+- **TiDB** for accounts, note records, and login sessions.
+- **Cloudinary** for user-uploaded note photos.
+
+## Configure environment variables
+
+Copy `.env.example` to `.env`, then fill in the values:
 
 ```sh
+cp .env.example .env
+```
+
+Required values:
+
+```sh
+SESSION_SECRET=replace-with-a-long-random-string
+
+TIDB_HOST=your-tidb-cluster-host
+TIDB_PORT=4000
+TIDB_USER=your-tidb-user
+TIDB_PASSWORD=your-tidb-password
+TIDB_DATABASE=your-database-name
+
+CLOUDINARY_CLOUD_NAME=your-cloud-name
+CLOUDINARY_API_KEY=your-api-key
+CLOUDINARY_API_SECRET=your-api-secret
+```
+
+Set `TIDB_CA_CERT` only when your TiDB cluster requires a specific CA
+certificate. The app otherwise connects to TiDB with TLS 1.2 or newer.
+
+For Replit, add the same names and values in **Secrets** instead of creating a
+`.env` file.
+
+## Run the app
+
+Install dependencies and start the development server:
+
+```sh
+npm install
 npm run dev
 ```
 
-Replit's PostgreSQL database stores accounts, note details, note photos, and
-login sessions. The app serves on port 5000. Set `SESSION_SECRET` in Replit
-Secrets for stable, secure login sessions; Replit can pass the existing secret
-through to the app.
+The app serves on port `5000` unless `PORT` is set. On startup, it creates the
+`users`, `notes`, `student_notes`, and `session_store` tables when they do not
+already exist.
 
 ## Try the sample data
 
@@ -30,14 +65,16 @@ Use this demo account to try posting and removing a note:
 
 Notes are public to browse. Signing in is required to post a note or remove
 one of your own. A student may share one note per subject per class day. Photo
-uploads accept JPG, PNG, and WebP files up to 8 MB.
+uploads accept JPG, PNG, and WebP files up to 8 MB and are stored in the
+`ndc-humanities-gl` Cloudinary folder with automatic format and quality.
 
 ## Project map
 
-- `server.js` — Express routes, PostgreSQL queries, sign-in, photo handling, and sample data.
+- `server.js` — Express routes, TiDB queries, sign-in, Cloudinary photo handling, and sample data.
 - `public/index.html` — Homepage, note library, upload form, and account dialogs.
 - `public/app.js` — Search, date/subject filters, login/signup, upload, and photo viewer interactions.
 - `public/styles.css` — Responsive layout, colors, typography, and component styling.
+- `.env.example` — Documented environment variables for TiDB, Cloudinary, and the app.
 
 ## Modify and add pages
 
@@ -50,10 +87,7 @@ uploads accept JPG, PNG, and WebP files up to 8 MB.
   `public/about.html`) and link it from the homepage. Express serves files in
   this folder automatically.
 - To add a subject, update the subject list in `server.js` and `public/app.js`,
-  update the PostgreSQL subject check constraint, and add its color in
+  review the `subject` columns in the TiDB tables, and add its color in
   `public/styles.css`.
-- Database table definitions are maintained in the Replit development
-  PostgreSQL database. When changing the schema for a published app, review the
-  schema diff in Replit's Publish flow.
-
-The development workflow is configured to start `npm run dev` on port 5000.
+- Schema changes are initialized in `server.js`. For an existing TiDB database,
+  apply the corresponding `ALTER TABLE` statements before deploying the app.
