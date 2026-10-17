@@ -52,6 +52,21 @@ The app serves on port `5000` unless `PORT` is set. On startup, it creates the
 `users`, `notes`, `student_notes`, and `session_store` tables when they do not
 already exist.
 
+## Deploy on Vercel
+
+The `public/` directory is served as static frontend files, and
+`api/[...slug].js` exposes the Express `/api` routes as a Vercel serverless
+function. No build step is required.
+
+1. Import the GitHub repository into Vercel.
+2. Add the environment variables from `.env.example` in **Project Settings →
+   Environment Variables**.
+3. Deploy.
+
+For production, always set a long random `SESSION_SECRET`. Use the real TiDB
+Cloud MySQL credentials (host, port `4000`, user, password, and database) and
+valid Cloudinary credentials. TiDB must be reachable over TLS.
+
 ## Try the sample data
 
 The database is seeded with 14 sample notes: one for every subject today and one
