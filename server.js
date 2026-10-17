@@ -643,7 +643,7 @@ app.use((error, _req, res, _next) => {
   res.status(500).json({ error: "Something went wrong. Please try again." });
 });
 
-function start() {
+function initializeDatabase() {
   databaseReady = (async () => {
     await pool.query("SELECT 1");
     await sessionStore.onReady();
@@ -690,9 +690,14 @@ function start() {
     () => console.log("Database initialization completed."),
     (error) => console.error("Database initialization failed:", error.message),
   );
+}
+
+initializeDatabase();
+
+if (require.main === module) {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`NDC Humanities G-L is running on port ${PORT}.`);
   });
 }
 
-start();
+module.exports = app;
