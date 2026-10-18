@@ -2,7 +2,7 @@
 
 A shared class-notes library for NDC Humanities Group G–L. Students can browse
 class notes by day, subject, and keyword; create an account; and share a photo
-of their notes with classmates.
+of their notes with classmates. Each note can contain up to eight photos.
 
 The app runs as one Node.js web server and uses:
 
@@ -50,8 +50,8 @@ npm run dev
 ```
 
 The app serves on port `5000` unless `PORT` is set. On startup, it creates the
-`users`, `notes`, `student_notes`, and `session_store` tables when they do not
-already exist.
+`users`, `notes`, `note_photos`, `student_notes`, and `session_store` tables
+when they do not already exist.
 
 ## Deploy on Vercel
 
@@ -82,8 +82,9 @@ Use this demo account to try posting and removing a note:
 
 Notes are public to browse. Signing in is required to post a note or remove
 one of your own. A student may share one note per subject per class day. Photo
-uploads accept JPG, PNG, and WebP files up to 8 MB and are stored in the
-`ndc-humanities-gl` Cloudinary folder with automatic format and quality.
+uploads accept up to eight JPG, PNG, or WebP files per note, each up to 8 MB,
+and are stored in the `ndc-humanities-gl` Cloudinary folder with automatic
+format and quality.
 
 ## Project map
 

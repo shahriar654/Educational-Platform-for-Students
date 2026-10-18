@@ -16,8 +16,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20261012" />
-    <script src="/app.js?v=20261012" defer></script>
+    <link rel="stylesheet" href="/styles.css?v=20261018" />
+    <script src="/app.js?v=20261018" defer></script>
   </head>
   <body>
     <header class="topbar">
@@ -205,7 +205,7 @@
         <span class="modal-mark upload-mark">↗</span>
         <p class="eyebrow section-eyebrow">SHARE WHAT YOU LEARNED</p>
         <h2>Pass your notes along.</h2>
-        <p class="modal-intro">Add one clear photo per subject for your class day.</p>
+        <p class="modal-intro">Add up to 8 clear photos for one subject and class day.</p>
         <div class="form-row">
           <div class="form-field">
             <label for="note-subject">Subject</label>
@@ -225,15 +225,15 @@
           <textarea id="note-caption" name="caption" rows="2" maxlength="1000" placeholder="What did you cover in class?"></textarea>
         </div>
         <div class="form-field">
-          <label for="note-photo">Photo of your notes</label>
+          <label for="note-photo">Photos of your notes</label>
           <div class="photo-upload" id="photo-dropzone">
-            <input id="note-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" required />
+            <input id="note-photo" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple required />
             <div class="upload-placeholder" id="upload-placeholder">
               <span class="upload-icon">↑</span>
-              <strong>Choose a photo or drop one here</strong>
-              <small>JPG, PNG or WebP · Up to 8 MB</small>
+              <strong>Choose photos or drop them here</strong>
+              <small>JPG, PNG or WebP · Up to 8 photos · 8 MB each</small>
             </div>
-            <img class="photo-preview is-hidden" id="photo-preview" alt="Preview of your class note photo" />
+            <div class="photo-preview-list is-hidden" id="photo-preview-list"></div>
           </div>
         </div>
         <p class="form-error" id="upload-error" role="alert"></p>

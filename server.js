@@ -24,6 +24,7 @@ const SUBJECTS = [
   "Geography",
 ];
 const MAX_IMAGE_SIZE = 8 * 1024 * 1024;
+const MAX_NOTE_PHOTOS = 8;
 
 function getDatabaseConfig() {
   const host = process.env.TIDB_HOST;
@@ -106,7 +107,7 @@ const app = express();
 let databaseReady = Promise.resolve();
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_IMAGE_SIZE, files: 1 },
+  limits: { fileSize: MAX_IMAGE_SIZE, files: MAX_NOTE_PHOTOS },
 });
 
 function getCloudinaryClient() {
@@ -484,9 +485,14 @@ app.get("/api/notes", async (req, res, next) => {
     params.push(100);
     const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
     const { rows } = await pool.query(
-      `SELECT id, subject, title, lesson_date::text AS lesson_date, caption,
-              author_name, uploader_id, is_sample, created_at
-       FROM notes ${where}
+      `SELECT notes.id, subject, title, lesson_date::text AS lesson_date, caption,
+              author_name, uploader_id, is_sample, created_at,
+              COALESCE(photo_counts.count, 0)::int AS photo_count
+       FROM notes
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*) FROM note_photos WHERE note_id = notes.id
+       ) photo_counts ON TRUE
+       ${where}
        ORDER BY lesson_date DESC, created_at DESC
        LIMIT $${params.length}`,
       params,
@@ -497,26 +503,47 @@ app.get("/api/notes", async (req, res, next) => {
   }
 });
 
-app.get("/api/notes/:id/image", async (req, res, next) => {
+async function sendNotePhoto(req, res, next, photoIndex = 0) {
   try {
     if (!/^\d+$/.test(req.params.id)) return res.sendStatus(404);
     const { rows } = await pool.query(
+      `SELECT image_url
+       FROM note_photos
+       WHERE note_id = $1
+       ORDER BY position
+       OFFSET $2
+       LIMIT 1`,
+      [Number(req.params.id), photoIndex],
+    );
+    if (rows[0]?.image_url) return res.redirect(302, rows[0].image_url);
+
+    if (photoIndex > 0) return res.sendStatus(404);
+    const { rows: noteRows } = await pool.query(
       "SELECT image_data, image_mime, note_image_url FROM notes WHERE id = $1",
       [Number(req.params.id)],
     );
-    if (!rows[0]) return res.sendStatus(404);
-    if (rows[0].note_image_url) return res.redirect(302, rows[0].note_image_url);
+    if (!noteRows[0]) return res.sendStatus(404);
+    if (noteRows[0].note_image_url) return res.redirect(302, noteRows[0].note_image_url);
     res.set({
-      "Content-Type": rows[0].image_mime,
+      "Content-Type": noteRows[0].image_mime,
       "Cache-Control": "public, max-age=3600",
     });
-    res.send(rows[0].image_data);
+    res.send(noteRows[0].image_data);
   } catch (error) {
     next(error);
   }
+}
+
+app.get("/api/notes/:id/image/:index", (req, res, next) => {
+  if (!/^\d+$/.test(req.params.index)) return res.sendStatus(404);
+  sendNotePhoto(req, res, next, Number(req.params.index));
 });
 
-app.post("/api/notes", requireStudent, upload.single("photo"), async (req, res, next) => {
+app.get("/api/notes/:id/image", (req, res, next) => {
+  sendNotePhoto(req, res, next);
+});
+
+app.post("/api/notes", requireStudent, upload.array("photos", MAX_NOTE_PHOTOS), async (req, res, next) => {
   try {
     const subject = String(req.body.subject || "");
     const title = String(req.body.title || "").trim();
@@ -534,17 +561,23 @@ app.post("/api/notes", requireStudent, upload.single("photo"), async (req, res, 
     if (!isValidDate(lessonDate) || lessonDate > todayInDhaka()) {
       return res.status(400).json({ error: "Choose today or an earlier class date." });
     }
-    if (!req.file) {
-      return res.status(400).json({ error: "Choose a photo of your class notes." });
+    const files = req.files || [];
+    if (!files.length) {
+      return res.status(400).json({ error: "Choose at least one photo of your class notes." });
     }
-    const detectedMime = imageFormat(req.file.buffer);
-    if (!detectedMime) {
-      return res.status(400).json({ error: "Use a valid JPG, PNG, or WebP image." });
+    if (files.some((file) => !imageFormat(file.buffer))) {
+      return res.status(400).json({ error: "Use only valid JPG, PNG, or WebP images." });
     }
-    let uploadedPhoto;
+    const uploadedPhotos = [];
     try {
-      uploadedPhoto = await uploadNotePhoto(req.file.buffer);
+      for (const file of files) {
+        uploadedPhotos.push({
+          ...(await uploadNotePhoto(file.buffer)),
+          mime: imageFormat(file.buffer),
+        });
+      }
     } catch (error) {
+      await Promise.all(uploadedPhotos.map((photo) => removeCloudinaryPhoto(photo.publicId)));
       if (error.code === "CLOUDINARY_NOT_CONFIGURED") {
         return res.status(503).json({
           error: "Photo sharing is not configured yet. Please contact the site administrator.",
@@ -570,20 +603,27 @@ app.post("/api/notes", requireStudent, upload.single("photo"), async (req, res, 
           title,
           lessonDate,
           caption,
-          detectedMime,
+          uploadedPhotos[0].mime,
           req.session.user.id,
           req.session.user.name,
-          uploadedPhoto.secureUrl,
-          uploadedPhoto.publicId,
+          uploadedPhotos[0].secureUrl,
+          uploadedPhotos[0].publicId,
         ],
       );
-      await client.query(
-        `INSERT INTO student_notes (student_name, subject, note_image_url)
-         VALUES ($1, $2, $3)`,
-        [req.session.user.name, subject, uploadedPhoto.secureUrl],
-      );
+      for (const [index, photo] of uploadedPhotos.entries()) {
+        await client.query(
+          `INSERT INTO note_photos (note_id, image_url, cloudinary_public_id, image_mime, position)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [rows[0].id, photo.secureUrl, photo.publicId, photo.mime, index],
+        );
+        await client.query(
+          `INSERT INTO student_notes (student_name, subject, note_image_url)
+           VALUES ($1, $2, $3)`,
+          [req.session.user.name, subject, photo.secureUrl],
+        );
+      }
       await client.query("COMMIT");
-      res.status(201).json({ note: rows[0] });
+      res.status(201).json({ note: { ...rows[0], photo_count: uploadedPhotos.length } });
     } catch (error) {
       if (client) {
         try {
@@ -592,10 +632,10 @@ app.post("/api/notes", requireStudent, upload.single("photo"), async (req, res, 
           console.error("Note save rollback failed:", rollbackError.message);
         }
       }
-      await removeCloudinaryPhoto(uploadedPhoto.publicId);
+      await Promise.all(uploadedPhotos.map((photo) => removeCloudinaryPhoto(photo.publicId)));
       if (error.code === "23505") {
         return res.status(409).json({
-          error: "You’ve already shared a photo for this subject and date.",
+          error: "You’ve already shared a note for this subject and date.",
         });
       }
       next(error);
@@ -626,11 +666,25 @@ app.delete("/api/notes/:id", requireStudent, async (req, res, next) => {
         await client.query("ROLLBACK");
         return res.status(404).json({ error: "That note is not yours to remove." });
       }
-      if (deletedNote.note_image_url) {
-        await client.query("DELETE FROM student_notes WHERE note_image_url = $1", [
+      const { rows: photoRows } = await client.query(
+        "SELECT image_url, cloudinary_public_id FROM note_photos WHERE note_id = $1",
+        [Number(req.params.id)],
+      );
+      const imageUrls = [
+        ...new Set([
           deletedNote.note_image_url,
-        ]);
+          ...photoRows.map((photo) => photo.image_url),
+        ].filter(Boolean)),
+      ];
+      if (imageUrls.length) {
+        await client.query("DELETE FROM student_notes WHERE note_image_url = ANY($1::text[])", [imageUrls]);
       }
+      deletedNote.photoPublicIds = [
+        ...new Set([
+          deletedNote.cloudinary_public_id,
+          ...photoRows.map((photo) => photo.cloudinary_public_id),
+        ].filter(Boolean)),
+      ];
       await client.query("DELETE FROM notes WHERE id = $1", [Number(req.params.id)]);
       await client.query("COMMIT");
     } catch (error) {
@@ -639,9 +693,9 @@ app.delete("/api/notes/:id", requireStudent, async (req, res, next) => {
     } finally {
       client.release();
     }
-    if (deletedNote.cloudinary_public_id) {
-      await removeCloudinaryPhoto(deletedNote.cloudinary_public_id);
-    }
+    await Promise.all(
+      deletedNote.photoPublicIds.map((publicId) => removeCloudinaryPhoto(publicId)),
+    );
     res.json({ ok: true });
   } catch (error) {
     next(error);
@@ -668,7 +722,7 @@ app.use((error, _req, res, _next) => {
     const message =
       error.code === "LIMIT_FILE_SIZE"
         ? "That photo is too large. The maximum size is 8 MB."
-        : "Choose one photo to upload.";
+        : "Choose up to 8 photos to upload.";
     return res.status(400).json({ error: message });
   }
   console.error(error);
@@ -711,6 +765,25 @@ function initializeDatabase() {
         sess TEXT NOT NULL,
         expire TIMESTAMP NOT NULL
       )`,
+    );
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS note_photos (
+        id SERIAL PRIMARY KEY,
+        note_id INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+        image_url TEXT NOT NULL,
+        cloudinary_public_id VARCHAR(255),
+        image_mime VARCHAR(100),
+        position INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT one_photo_position UNIQUE (note_id, position)
+      )`,
+    );
+    await pool.query(
+      `INSERT INTO note_photos (note_id, image_url, cloudinary_public_id, image_mime, position)
+       SELECT id, note_image_url, cloudinary_public_id, image_mime, 0
+       FROM notes
+       WHERE note_image_url IS NOT NULL
+       ON CONFLICT (note_id, position) DO NOTHING`,
     );
     await pool.query(
       `CREATE TABLE IF NOT EXISTS student_notes (
