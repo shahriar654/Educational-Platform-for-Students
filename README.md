@@ -6,7 +6,8 @@ of their notes with classmates.
 
 The app runs as one Node.js web server and uses:
 
-- **TiDB** for accounts, note records, and login sessions.
+- **TiDB Cloud's PostgreSQL-compatible endpoint** for accounts, note records,
+  and login sessions.
 - **Cloudinary** for user-uploaded note photos.
 
 ## Configure environment variables
@@ -23,7 +24,7 @@ Required values:
 SESSION_SECRET=replace-with-a-long-random-string
 
 TIDB_HOST=your-tidb-cluster-host
-TIDB_PORT=4000
+TIDB_PORT=5432
 TIDB_USER=your-tidb-user
 TIDB_PASSWORD=your-tidb-password
 TIDB_DATABASE=your-database-name
@@ -34,7 +35,7 @@ CLOUDINARY_API_SECRET=your-api-secret
 ```
 
 Set `TIDB_CA_CERT` only when your TiDB cluster requires a specific CA
-certificate. The app otherwise connects to TiDB with TLS 1.2 or newer.
+certificate. The app otherwise connects to TiDB with TLS.
 
 For Replit, add the same names and values in **Secrets** instead of creating a
 `.env` file.
@@ -63,9 +64,10 @@ function. No build step is required.
    Environment Variables**.
 3. Deploy.
 
-For production, always set a long random `SESSION_SECRET`. Use the real TiDB
-Cloud MySQL credentials (host, port `4000`, user, password, and database) and
-valid Cloudinary credentials. TiDB must be reachable over TLS.
+For production, always set a long random `SESSION_SECRET`. Use the TiDB Cloud
+PostgreSQL-compatible credentials (host ending in `pg.tidbcloud.com`, port
+`5432`, user, password, and database) and valid Cloudinary credentials. TiDB
+must be reachable over TLS.
 
 ## Try the sample data
 
