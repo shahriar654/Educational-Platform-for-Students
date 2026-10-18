@@ -979,6 +979,11 @@ kbd {
   letter-spacing: .55px;
 }
 
+.photo-count-badge {
+  color: #456b53;
+  background: rgb(236 247 239 / 94%);
+}
+
 .photo-view {
   position: absolute;
   right: 9px;
@@ -1507,10 +1512,21 @@ kbd {
   font-size: 8px;
 }
 
+.photo-preview-list {
+  display: grid;
+  width: 100%;
+  max-height: 220px;
+  grid-template-columns: repeat(auto-fit, minmax(95px, 1fr));
+  gap: 8px;
+  overflow: auto;
+  padding: 8px;
+}
+
 .photo-preview {
   width: 100%;
-  max-height: 190px;
-  object-fit: contain;
+  height: 95px;
+  border-radius: 5px;
+  object-fit: cover;
 }
 
 .form-error {
@@ -1633,9 +1649,45 @@ kbd {
   font-size: 20px;
 }
 
+.viewer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  gap: 10px;
+  padding-bottom: 9px;
+}
+
+.viewer-nav {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  border: 1px solid #dfe5df;
+  border-radius: 50%;
+  color: #486153;
+  background: #fff;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.viewer-nav:hover {
+  border-color: #9db8a5;
+  background: #f2f7f2;
+}
+
+.viewer-index {
+  min-width: 88px;
+  color: #77877d;
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+}
+
 .viewer-frame {
   display: grid;
-  max-height: calc(95vh - 85px);
+  max-height: calc(95vh - 115px);
   place-items: center;
   overflow: auto;
   border-radius: 7px;
@@ -1645,7 +1697,7 @@ kbd {
 .viewer-frame img {
   display: block;
   max-width: 100%;
-  max-height: calc(95vh - 95px);
+  max-height: calc(95vh - 125px);
   object-fit: contain;
   box-shadow: 0 5px 25px rgb(33 38 32 / 15%);
 }

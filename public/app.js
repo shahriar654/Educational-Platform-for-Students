@@ -6,7 +6,7 @@ const subjectPicker = $("#subject-picker");
 const notesGrid = $("#notes-grid");
 let searchTimer;
 let toastTimer;
-let photoPreviewUrl = null;
+let photoPreviewUrls = [];
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (character) => ({
@@ -158,6 +158,7 @@ function noteCard(note) {
     <button class="note-photo-button" type="button" data-note-open="${note.id}" aria-label="Open photo: ${escapeHtml(note.title)}">
       <img class="note-photo" src="/api/notes/${note.id}/image" alt="Photo of ${escapeHtml(note.title)} class notes" loading="lazy" />
       <span class="photo-badge">${escapeHtml(note.subject)}</span>
+      ${note.photo_count > 1 ? `<span class="sample-badge photo-count-badge">${note.photo_count} PHOTOS</span>` : ""}
       ${note.is_sample ? `<span class="sample-badge">SAMPLE NOTE</span>` : ""}
       <span class="photo-view" aria-hidden="true">View photo ↗</span>
     </button>
@@ -241,33 +242,42 @@ function openUpload() {
 }
 
 function resetPhotoPreview() {
-  if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
-  photoPreviewUrl = null;
+  photoPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+  photoPreviewUrls = [];
   $("#note-photo").value = "";
-  $("#photo-preview").src = "";
-  $("#photo-preview").classList.add("is-hidden");
+  $("#photo-preview-list").innerHTML = "";
+  $("#photo-preview-list").classList.add("is-hidden");
   $("#upload-placeholder").classList.remove("is-hidden");
   $("#photo-dropzone").classList.remove("has-image");
 }
 
-function setPhoto(file) {
-  if (!file) return;
+function setPhotos(files) {
+  const selected = Array.from(files || []);
+  if (!selected.length) return;
   const allowed = ["image/jpeg", "image/png", "image/webp"];
-  if (!allowed.includes(file.type)) {
-    $("#upload-error").textContent = "Use a JPG, PNG, or WebP photo.";
+  if (selected.length > 8) {
+    $("#upload-error").textContent = "Choose up to 8 photos for one note.";
     $("#note-photo").value = "";
     return;
   }
-  if (file.size > 8 * 1024 * 1024) {
-    $("#upload-error").textContent = "That photo is too large. The maximum size is 8 MB.";
+  if (selected.some((file) => !allowed.includes(file.type))) {
+    $("#upload-error").textContent = "Use only JPG, PNG, or WebP photos.";
+    $("#note-photo").value = "";
+    return;
+  }
+  const oversized = selected.find((file) => file.size > 8 * 1024 * 1024);
+  if (oversized) {
+    $("#upload-error").textContent = `${oversized.name} is too large. Each photo can be up to 8 MB.`;
     $("#note-photo").value = "";
     return;
   }
   $("#upload-error").textContent = "";
-  if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
-  photoPreviewUrl = URL.createObjectURL(file);
-  $("#photo-preview").src = photoPreviewUrl;
-  $("#photo-preview").classList.remove("is-hidden");
+  photoPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+  photoPreviewUrls = selected.map((file) => URL.createObjectURL(file));
+  $("#photo-preview-list").innerHTML = photoPreviewUrls.map((url, index) =>
+    `<img class="photo-preview" src="${url}" alt="Preview of class note photo ${index + 1}" />`,
+  ).join("");
+  $("#photo-preview-list").classList.remove("is-hidden");
   $("#upload-placeholder").classList.add("is-hidden");
   $("#photo-dropzone").classList.add("has-image");
 }
@@ -286,12 +296,29 @@ async function deleteNote(id) {
 function openImage(id) {
   const note = state.notes.find((item) => Number(item.id) === Number(id));
   if (!note) return;
+  const photoCount = Math.max(1, Number(note.photo_count || 1));
   const overlay = document.createElement("dialog");
   overlay.className = "image-viewer";
   overlay.innerHTML = `<button type="button" class="viewer-close" aria-label="Close photo">×</button>
-    <div class="viewer-frame"><img src="/api/notes/${note.id}/image" alt="Photo of ${escapeHtml(note.title)} class notes" /></div>
+    <div class="viewer-toolbar">
+      ${photoCount > 1 ? `<button class="viewer-nav" type="button" data-viewer-prev aria-label="Previous photo">‹</button>` : ""}
+      <span class="viewer-index"></span>
+      ${photoCount > 1 ? `<button class="viewer-nav" type="button" data-viewer-next aria-label="Next photo">›</button>` : ""}
+    </div>
+    <div class="viewer-frame"><img alt="Photo of ${escapeHtml(note.title)} class notes" /></div>
     <div class="viewer-caption"><span>${escapeHtml(note.subject)} · ${escapeHtml(prettyDate(note.lesson_date))}</span><strong>${escapeHtml(note.title)}</strong></div>`;
   document.body.append(overlay);
+  const image = overlay.querySelector(".viewer-frame img");
+  const indexLabel = overlay.querySelector(".viewer-index");
+  let photoIndex = 0;
+  const showPhoto = (index) => {
+    photoIndex = (index + photoCount) % photoCount;
+    image.src = `/api/notes/${note.id}/image/${photoIndex}`;
+    indexLabel.textContent = photoCount > 1 ? `Photo ${photoIndex + 1} of ${photoCount}` : "";
+  };
+  overlay.querySelector("[data-viewer-prev]")?.addEventListener("click", () => showPhoto(photoIndex - 1));
+  overlay.querySelector("[data-viewer-next]")?.addEventListener("click", () => showPhoto(photoIndex + 1));
+  showPhoto(0);
   overlay.showModal();
   const close = () => {
     overlay.close();
@@ -386,7 +413,7 @@ function bindEvents() {
       setBusy(button, false);
     }
   });
-  $("#note-photo").addEventListener("change", (event) => setPhoto(event.currentTarget.files[0]));
+  $("#note-photo").addEventListener("change", (event) => setPhotos(event.currentTarget.files));
   const dropzone = $("#photo-dropzone");
   dropzone.addEventListener("dragover", (event) => {
     event.preventDefault();
@@ -396,12 +423,12 @@ function bindEvents() {
   dropzone.addEventListener("drop", (event) => {
     event.preventDefault();
     dropzone.classList.remove("is-dragover");
-    const file = event.dataTransfer.files[0];
-    if (!file) return;
+    const files = Array.from(event.dataTransfer.files || []);
+    if (!files.length) return;
     const transfer = new DataTransfer();
-    transfer.items.add(file);
+    files.slice(0, 8).forEach((file) => transfer.items.add(file));
     $("#note-photo").files = transfer.files;
-    setPhoto(file);
+    setPhotos($("#note-photo").files);
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "/" && !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) {
