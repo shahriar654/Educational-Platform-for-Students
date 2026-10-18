@@ -5,10 +5,9 @@ const path = require("node:path");
 const { Readable } = require("node:stream");
 const express = require("express");
 const session = require("express-session");
-const MySQLStore = require("express-mysql-session")(session);
 const multer = require("multer");
 const bcrypt = require("bcryptjs");
-const mysql = require("mysql2/promise");
+const { Pool } = require("pg");
 const cloudinary = require("cloudinary").v2;
 
 const PORT = Number(process.env.PORT || 5000);
@@ -33,41 +32,76 @@ function getDatabaseConfig() {
   if (!host || !user || !database) {
     throw new Error("TIDB_HOST, TIDB_USER, and TIDB_DATABASE must be configured.");
   }
-  const ssl = {
-    minVersion: "TLSv1.2",
-    rejectUnauthorized: true,
-  };
+  const ssl = { rejectUnauthorized: true };
   if (process.env.TIDB_CA_CERT) ssl.ca = process.env.TIDB_CA_CERT;
   return {
     host,
-    port: Number(process.env.TIDB_PORT || 4000),
+    port: Number(process.env.TIDB_PORT || 5432),
     user,
     password: process.env.TIDB_PASSWORD || "",
     database,
-    waitForConnections: true,
-    connectionLimit: 10,
     ssl,
   };
 }
 
-const pool = mysql.createPool(getDatabaseConfig());
-const sessionStore = new MySQLStore(
-  {
-    clearExpired: true,
-    checkExpirationInterval: 15 * 60 * 1000,
-    expiration: 7 * 24 * 60 * 60 * 1000,
-    createDatabaseTable: true,
-    schema: {
-      tableName: "session_store",
-      columnNames: {
-        session_id: "session_id",
-        expires: "expires",
-        data: "data",
-      },
-    },
-  },
-  pool,
-);
+const pool = new Pool(getDatabaseConfig());
+
+class TidbSessionStore extends session.Store {
+  constructor(pool) {
+    super();
+    this.pool = pool;
+  }
+
+  get(sid, callback) {
+    this.pool
+      .query(
+        "SELECT sess FROM session_store WHERE sid = $1 AND expire >= CURRENT_TIMESTAMP",
+        [sid],
+      )
+      .then(({ rows }) => {
+        const sess = rows[0]?.sess;
+        callback(null, typeof sess === "string" ? JSON.parse(sess) : sess || null);
+      })
+      .catch(callback);
+  }
+
+  set(sid, sess, callback) {
+    const expires = sess?.cookie?.expires
+      ? new Date(sess.cookie.expires)
+      : new Date(Date.now() + (sess?.cookie?.maxAge || 7 * 24 * 60 * 60 * 1000));
+    this.pool
+      .query(
+        `INSERT INTO session_store (sid, sess, expire)
+         VALUES ($1, $2, $3::timestamp)
+         ON CONFLICT (sid) DO UPDATE
+         SET sess = EXCLUDED.sess, expire = EXCLUDED.expire`,
+        [sid, JSON.stringify(sess), expires.toISOString()],
+      )
+      .then(() => callback(null))
+      .catch(callback);
+  }
+
+  destroy(sid, callback) {
+    this.pool
+      .query("DELETE FROM session_store WHERE sid = $1", [sid])
+      .then(() => callback(null))
+      .catch(callback);
+  }
+
+  touch(sid, sess, callback) {
+    const expires = sess?.cookie?.expires
+      ? new Date(sess.cookie.expires)
+      : new Date(Date.now() + (sess?.cookie?.maxAge || 7 * 24 * 60 * 60 * 1000));
+    this.pool
+      .query("UPDATE session_store SET expire = $2::timestamp WHERE sid = $1", [
+        sid,
+        expires.toISOString(),
+      ])
+      .then(() => callback(null))
+      .catch(callback);
+  }
+}
+
 const app = express();
 let databaseReady = Promise.resolve();
 const upload = multer({
@@ -156,7 +190,7 @@ app.use(
     secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    store: sessionStore,
+    store: new TidbSessionStore(pool),
     cookie: {
       httpOnly: true,
       sameSite: "lax",
@@ -313,12 +347,13 @@ async function seedDemoData() {
   const demoEmail = "demo@ndcgl.edu.bd";
   const demoPasswordHash = await bcrypt.hash("NdcStudent2026!", 12);
   await pool.query(
-    `INSERT IGNORE INTO users (name, email, password_hash)
-     VALUES ('NDC Demo Student', ?, ?)`,
+    `INSERT INTO users (name, email, password_hash)
+     VALUES ('NDC Demo Student', $1, $2)
+     ON CONFLICT (email) DO NOTHING`,
     [demoEmail, demoPasswordHash],
   );
 
-  const [counts] = await pool.query("SELECT COUNT(*) AS count FROM notes");
+  const { rows: counts } = await pool.query("SELECT COUNT(*)::int AS count FROM notes");
   if (counts[0].count > 0) return;
 
   const samples = [
@@ -337,7 +372,7 @@ async function seedDemoData() {
       await pool.query(
         `INSERT INTO notes
           (subject, title, lesson_date, caption, image_data, image_mime, author_name, is_sample)
-         VALUES (?, ?, ?, ?, ?, 'image/png', ?, TRUE)`,
+         VALUES ($1, $2, $3::date, $4, $5, 'image/png', $6, TRUE)`,
         [
           subject,
           title,
@@ -374,16 +409,16 @@ app.post("/api/auth/signup", async (req, res, next) => {
       return res.status(400).json({ error: "Your password must be at least 8 characters." });
     }
     const passwordHash = await bcrypt.hash(password, 12);
-    const [result] = await pool.query(
+    const { rows } = await pool.query(
       `INSERT INTO users (name, email, password_hash)
-       VALUES (?, ?, ?)`,
+       VALUES ($1, $2, $3)
+       RETURNING id, name, email`,
       [name, email, passwordHash],
     );
-    const user = { id: result.insertId, name, email };
-    req.session.user = user;
-    res.status(201).json({ user });
+    req.session.user = rows[0];
+    res.status(201).json({ user: rows[0] });
   } catch (error) {
-    if (error.code === "ER_DUP_ENTRY") {
+    if (error.code === "23505") {
       return res.status(409).json({ error: "An account with that email already exists." });
     }
     next(error);
@@ -394,8 +429,8 @@ app.post("/api/auth/login", async (req, res, next) => {
   try {
     const email = String(req.body.email || "").trim().toLowerCase();
     const password = String(req.body.password || "");
-    const [rows] = await pool.query(
-      "SELECT id, name, email, password_hash FROM users WHERE email = ?",
+    const { rows } = await pool.query(
+      "SELECT id, name, email, password_hash FROM users WHERE email = $1",
       [email],
     );
     if (!rows[0] || !(await bcrypt.compare(password, rows[0].password_hash))) {
@@ -432,27 +467,28 @@ app.get("/api/notes", async (req, res, next) => {
         return res.status(400).json({ error: "Choose a valid class date." });
       }
       params.push(req.query.date);
-      filters.push("lesson_date = ?");
+      filters.push(`lesson_date = $${params.length}::date`);
     }
     if (req.query.subject && req.query.subject !== "all") {
       if (!SUBJECTS.includes(req.query.subject)) {
         return res.status(400).json({ error: "Choose one of the listed subjects." });
       }
       params.push(req.query.subject);
-      filters.push("subject = ?");
+      filters.push(`subject = $${params.length}`);
     }
     const search = String(req.query.q || "").trim().slice(0, 100);
     if (search) {
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
-      filters.push("(title LIKE ? OR caption LIKE ? OR author_name LIKE ?)");
+      params.push(`%${search}%`);
+      filters.push(`(title ILIKE $${params.length} OR caption ILIKE $${params.length} OR author_name ILIKE $${params.length})`);
     }
+    params.push(100);
     const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
-    const [rows] = await pool.query(
-      `SELECT id, subject, title, DATE_FORMAT(lesson_date, '%Y-%m-%d') AS lesson_date,
-              caption, author_name, uploader_id, is_sample, created_at
+    const { rows } = await pool.query(
+      `SELECT id, subject, title, lesson_date::text AS lesson_date, caption,
+              author_name, uploader_id, is_sample, created_at
        FROM notes ${where}
        ORDER BY lesson_date DESC, created_at DESC
-       LIMIT 100`,
+       LIMIT $${params.length}`,
       params,
     );
     res.json({ notes: rows });
@@ -464,8 +500,8 @@ app.get("/api/notes", async (req, res, next) => {
 app.get("/api/notes/:id/image", async (req, res, next) => {
   try {
     if (!/^\d+$/.test(req.params.id)) return res.sendStatus(404);
-    const [rows] = await pool.query(
-      "SELECT image_data, image_mime, note_image_url FROM notes WHERE id = ?",
+    const { rows } = await pool.query(
+      "SELECT image_data, image_mime, note_image_url FROM notes WHERE id = $1",
       [Number(req.params.id)],
     );
     if (!rows[0]) return res.sendStatus(404);
@@ -520,13 +556,15 @@ app.post("/api/notes", requireStudent, upload.single("photo"), async (req, res, 
 
     let client;
     try {
-      client = await pool.getConnection();
-      await client.beginTransaction();
-      const [result] = await client.query(
+      client = await pool.connect();
+      await client.query("BEGIN");
+      const { rows } = await client.query(
         `INSERT INTO notes
           (subject, title, lesson_date, caption, image_data, image_mime, uploader_id,
            author_name, note_image_url, cloudinary_public_id)
-         VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)`,
+         VALUES ($1, $2, $3::date, $4, NULL, $5, $6, $7, $8, $9)
+         RETURNING id, subject, title, lesson_date::text AS lesson_date, caption,
+                   author_name, uploader_id, is_sample, created_at`,
         [
           subject,
           title,
@@ -541,27 +579,21 @@ app.post("/api/notes", requireStudent, upload.single("photo"), async (req, res, 
       );
       await client.query(
         `INSERT INTO student_notes (student_name, subject, note_image_url)
-         VALUES (?, ?, ?)`,
+         VALUES ($1, $2, $3)`,
         [req.session.user.name, subject, uploadedPhoto.secureUrl],
       );
-      const [rows] = await client.query(
-        `SELECT id, subject, title, DATE_FORMAT(lesson_date, '%Y-%m-%d') AS lesson_date,
-                caption, author_name, uploader_id, is_sample, created_at
-         FROM notes WHERE id = ?`,
-        [result.insertId],
-      );
-      await client.commit();
+      await client.query("COMMIT");
       res.status(201).json({ note: rows[0] });
     } catch (error) {
       if (client) {
         try {
-          await client.rollback();
+          await client.query("ROLLBACK");
         } catch (rollbackError) {
           console.error("Note save rollback failed:", rollbackError.message);
         }
       }
       await removeCloudinaryPhoto(uploadedPhoto.publicId);
-      if (error.code === "ER_DUP_ENTRY") {
+      if (error.code === "23505") {
         return res.status(409).json({
           error: "You’ve already shared a photo for this subject and date.",
         });
@@ -578,31 +610,31 @@ app.post("/api/notes", requireStudent, upload.single("photo"), async (req, res, 
 app.delete("/api/notes/:id", requireStudent, async (req, res, next) => {
   try {
     if (!/^\d+$/.test(req.params.id)) return res.sendStatus(404);
-    const client = await pool.getConnection();
+    const client = await pool.connect();
     let deletedNote;
     try {
-      await client.beginTransaction();
-      const [rows] = await client.query(
+      await client.query("BEGIN");
+      const { rows } = await client.query(
         `SELECT note_image_url, cloudinary_public_id
          FROM notes
-         WHERE id = ? AND uploader_id = ? AND is_sample = FALSE
+         WHERE id = $1 AND uploader_id = $2 AND is_sample = FALSE
          FOR UPDATE`,
         [Number(req.params.id), req.session.user.id],
       );
       deletedNote = rows[0];
       if (!deletedNote) {
-        await client.rollback();
+        await client.query("ROLLBACK");
         return res.status(404).json({ error: "That note is not yours to remove." });
       }
       if (deletedNote.note_image_url) {
-        await client.query("DELETE FROM student_notes WHERE note_image_url = ?", [
+        await client.query("DELETE FROM student_notes WHERE note_image_url = $1", [
           deletedNote.note_image_url,
         ]);
       }
-      await client.query("DELETE FROM notes WHERE id = ?", [Number(req.params.id)]);
-      await client.commit();
+      await client.query("DELETE FROM notes WHERE id = $1", [Number(req.params.id)]);
+      await client.query("COMMIT");
     } catch (error) {
-      await client.rollback();
+      await client.query("ROLLBACK");
       throw error;
     } finally {
       client.release();
@@ -646,10 +678,9 @@ app.use((error, _req, res, _next) => {
 function initializeDatabase() {
   databaseReady = (async () => {
     await pool.query("SELECT 1");
-    await sessionStore.onReady();
     await pool.query(
       `CREATE TABLE IF NOT EXISTS users (
-        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        id SERIAL PRIMARY KEY,
         name VARCHAR(80) NOT NULL,
         email VARCHAR(254) NOT NULL UNIQUE,
         password_hash VARCHAR(255) NOT NULL,
@@ -658,26 +689,32 @@ function initializeDatabase() {
     );
     await pool.query(
       `CREATE TABLE IF NOT EXISTS notes (
-        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        id SERIAL PRIMARY KEY,
         subject VARCHAR(40) NOT NULL,
         title VARCHAR(140) NOT NULL,
         lesson_date DATE NOT NULL,
         caption TEXT,
-        image_data LONGBLOB,
+        image_data BYTEA,
         image_mime VARCHAR(100),
-        uploader_id INT UNSIGNED,
+        uploader_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
         author_name VARCHAR(80) NOT NULL,
         is_sample BOOLEAN NOT NULL DEFAULT FALSE,
         note_image_url TEXT,
         cloudinary_public_id VARCHAR(255),
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE KEY one_note_per_subject_day (uploader_id, subject, lesson_date),
-        FOREIGN KEY (uploader_id) REFERENCES users(id) ON DELETE SET NULL
+        CONSTRAINT one_note_per_subject_day UNIQUE (uploader_id, subject, lesson_date)
+      )`,
+    );
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS session_store (
+        sid VARCHAR(255) PRIMARY KEY,
+        sess TEXT NOT NULL,
+        expire TIMESTAMP NOT NULL
       )`,
     );
     await pool.query(
       `CREATE TABLE IF NOT EXISTS student_notes (
-        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        id SERIAL PRIMARY KEY,
         student_name VARCHAR(80) NOT NULL,
         subject VARCHAR(40) NOT NULL,
         date_uploaded TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
