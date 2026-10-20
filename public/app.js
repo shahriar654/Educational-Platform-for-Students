@@ -187,7 +187,7 @@ function renderNotes() {
     button.addEventListener("click", () => openImage(button.dataset.noteOpen)),
   );
   notesGrid.querySelectorAll("[data-delete-note]").forEach((button) =>
-    button.addEventListener("click", () => deleteNote(button.dataset.deleteNote)),
+    button.addEventListener("click", () => deleteNote(button.dataset.deleteNote, button)),
   );
 }
 
@@ -282,13 +282,15 @@ function setPhotos(files) {
   $("#photo-dropzone").classList.add("has-image");
 }
 
-async function deleteNote(id) {
+async function deleteNote(id, button) {
   if (!confirm("Remove this class note? This can’t be undone.")) return;
+  setBusy(button, true, "Removing…");
   try {
     await api(`/api/notes/${id}`, { method: "DELETE" });
     await loadNotes();
     showToast("Your note has been removed.");
   } catch (error) {
+    setBusy(button, false);
     showToast(error.message);
   }
 }
