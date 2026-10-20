@@ -227,13 +227,14 @@
         <div class="form-field">
           <label for="note-photo">Photos of your notes</label>
           <div class="photo-upload" id="photo-dropzone">
-            <input id="note-photo" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple required />
+            <input id="note-photo" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple />
             <div class="upload-placeholder" id="upload-placeholder">
               <span class="upload-icon">↑</span>
               <strong>Choose photos or drop them here</strong>
               <small>JPG, PNG or WebP · Up to 8 photos · 8 MB each</small>
             </div>
             <div class="photo-preview-list is-hidden" id="photo-preview-list"></div>
+            <p class="photo-selection-hint is-hidden" id="photo-selection-hint"></p>
           </div>
         </div>
         <p class="form-error" id="upload-error" role="alert"></p>

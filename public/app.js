@@ -7,6 +7,7 @@ const notesGrid = $("#notes-grid");
 let searchTimer;
 let toastTimer;
 let photoPreviewUrls = [];
+let selectedPhotoFiles = [];
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (character) => ({
@@ -244,40 +245,51 @@ function openUpload() {
 function resetPhotoPreview() {
   photoPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
   photoPreviewUrls = [];
+  selectedPhotoFiles = [];
   $("#note-photo").value = "";
   $("#photo-preview-list").innerHTML = "";
   $("#photo-preview-list").classList.add("is-hidden");
+  $("#photo-selection-hint").textContent = "";
+  $("#photo-selection-hint").classList.add("is-hidden");
   $("#upload-placeholder").classList.remove("is-hidden");
   $("#photo-dropzone").classList.remove("has-image");
 }
 
 function setPhotos(files) {
-  const selected = Array.from(files || []);
-  if (!selected.length) return;
+  const incoming = Array.from(files || []);
+  if (!incoming.length) return;
   const allowed = ["image/jpeg", "image/png", "image/webp"];
-  if (selected.length > 8) {
-    $("#upload-error").textContent = "Choose up to 8 photos for one note.";
-    $("#note-photo").value = "";
-    return;
-  }
-  if (selected.some((file) => !allowed.includes(file.type))) {
+  if (incoming.some((file) => !allowed.includes(file.type))) {
     $("#upload-error").textContent = "Use only JPG, PNG, or WebP photos.";
-    $("#note-photo").value = "";
     return;
   }
-  const oversized = selected.find((file) => file.size > 8 * 1024 * 1024);
+  const oversized = incoming.find((file) => file.size > 8 * 1024 * 1024);
   if (oversized) {
     $("#upload-error").textContent = `${oversized.name} is too large. Each photo can be up to 8 MB.`;
-    $("#note-photo").value = "";
     return;
   }
+  const fileKey = (file) => `${file.name}:${file.size}:${file.lastModified}`;
+  const existingKeys = new Set(selectedPhotoFiles.map(fileKey));
+  const combined = [
+    ...selectedPhotoFiles,
+    ...incoming.filter((file) => !existingKeys.has(fileKey(file))),
+  ];
+  if (combined.length > 8) {
+    $("#upload-error").textContent = `You can add ${Math.max(0, 8 - selectedPhotoFiles.length)} more photo${selectedPhotoFiles.length === 7 ? "" : "s"} to this note.`;
+    return;
+  }
+  selectedPhotoFiles = combined;
   $("#upload-error").textContent = "";
   photoPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
-  photoPreviewUrls = selected.map((file) => URL.createObjectURL(file));
+  photoPreviewUrls = selectedPhotoFiles.map((file) => URL.createObjectURL(file));
   $("#photo-preview-list").innerHTML = photoPreviewUrls.map((url, index) =>
     `<img class="photo-preview" src="${url}" alt="Preview of class note photo ${index + 1}" />`,
   ).join("");
   $("#photo-preview-list").classList.remove("is-hidden");
+  $("#photo-selection-hint").textContent = selectedPhotoFiles.length === 8
+    ? "8 photos selected — this note is full."
+    : `${selectedPhotoFiles.length} photo${selectedPhotoFiles.length === 1 ? "" : "s"} selected · Click or drop again to add more`;
+  $("#photo-selection-hint").classList.remove("is-hidden");
   $("#upload-placeholder").classList.add("is-hidden");
   $("#photo-dropzone").classList.add("has-image");
 }
@@ -398,7 +410,13 @@ function bindEvents() {
     const button = $("#upload-submit");
     setBusy(button, true, "Sharing your note…");
     try {
+      if (!selectedPhotoFiles.length) {
+        $("#upload-error").textContent = "Choose at least one photo of your class notes.";
+        return;
+      }
       const form = new FormData(event.currentTarget);
+      form.delete("photos");
+      selectedPhotoFiles.forEach((file) => form.append("photos", file, file.name));
       await api("/api/notes", { method: "POST", body: form });
       $("#upload-dialog").close();
       resetPhotoPreview();
@@ -415,7 +433,10 @@ function bindEvents() {
       setBusy(button, false);
     }
   });
-  $("#note-photo").addEventListener("change", (event) => setPhotos(event.currentTarget.files));
+  $("#note-photo").addEventListener("change", (event) => {
+    setPhotos(event.currentTarget.files);
+    event.currentTarget.value = "";
+  });
   const dropzone = $("#photo-dropzone");
   dropzone.addEventListener("dragover", (event) => {
     event.preventDefault();
@@ -427,10 +448,7 @@ function bindEvents() {
     dropzone.classList.remove("is-dragover");
     const files = Array.from(event.dataTransfer.files || []);
     if (!files.length) return;
-    const transfer = new DataTransfer();
-    files.slice(0, 8).forEach((file) => transfer.items.add(file));
-    $("#note-photo").files = transfer.files;
-    setPhotos($("#note-photo").files);
+    setPhotos(files);
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "/" && !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) {

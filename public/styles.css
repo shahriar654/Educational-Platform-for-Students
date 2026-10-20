@@ -1464,6 +1464,8 @@ kbd {
 
 .photo-upload.has-image {
   min-height: 120px;
+  align-content: space-between;
+  place-items: stretch;
   border-style: solid;
   background: #edf1ec;
 }
@@ -1527,6 +1529,16 @@ kbd {
   height: 95px;
   border-radius: 5px;
   object-fit: cover;
+}
+
+.photo-selection-hint {
+  align-self: end;
+  margin: 0;
+  padding: 0 10px 9px;
+  color: #637b6a;
+  font-size: 8px;
+  font-weight: 700;
+  text-align: center;
 }
 
 .form-error {
