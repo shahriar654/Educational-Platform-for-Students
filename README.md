@@ -1,111 +1,285 @@
 # NDC Humanities G–L
 
-A shared class-notes library for NDC Humanities Group G–L. Students can browse
-class notes by day, subject, and keyword; create an account; and share a photo
-of their notes with classmates. Each note can contain up to eight photos.
+**A shared digital notebook for classmates.**
 
-The app runs as one Node.js web server and uses:
+NDC Humanities G–L is a web application where students can browse class notes by
+date, subject, and keyword, then contribute their own photographed notebook
+pages for the group to study from.
 
-- **TiDB Cloud's PostgreSQL-compatible endpoint** for accounts, note records,
-  and login sessions.
-- **Cloudinary** for user-uploaded note photos.
+---
 
-## Configure environment variables
+## Presentation overview
 
-Copy `.env.example` to `.env`, then fill in the values:
+### The problem
+
+Class notes are often spread across notebooks, phones, and private messages.
+When a student misses a class or wants to revise, finding a complete and clear
+set of notes can take longer than the studying itself.
+
+### The solution
+
+This project creates one shared study library for the class:
+
+- Every student can browse notes without creating an account.
+- Signed-in students can publish a note for a subject and class date.
+- One note can contain up to eight photos, so a lesson can include multiple
+  pages.
+- Students can remove their own notes when needed.
+- Sample notes make the library useful immediately after setup.
+
+### Target users
+
+- Students in NDC Humanities Group G–L.
+- Classmates who missed a lecture and need a reliable note source.
+- Students who want one organized archive for revision.
+
+---
+
+## Core features
+
+| Area | What the app does |
+| --- | --- |
+| Browse | Shows class notes by day, subject, and keyword. |
+| Upload | Accepts up to 8 JPG, PNG, or WebP photos per note. |
+| Accounts | Supports student sign-up, login, logout, and persistent sessions. |
+| Ownership | Lets a student delete only the notes they uploaded. |
+| Media delivery | Redirects note images to Cloudinary-hosted optimized URLs. |
+| Deployment | Runs locally as a Node.js server or on Vercel as a serverless app. |
+
+---
+
+## Technology stack
+
+### Frontend
+
+- HTML5
+- CSS3
+- Vanilla JavaScript
+- Responsive static UI served from `public/`
+
+### Backend
+
+- Node.js
+- Express 5
+- Multer for multipart photo uploads
+- express-session for signed-in sessions
+- bcryptjs for password hashing
+
+### Database
+
+- TiDB Cloud
+- PostgreSQL-compatible endpoint at port `5432`
+- `pg` Node.js driver
+
+### Media storage
+
+- Cloudinary
+- Automatic image format and quality optimization
+
+### Hosting
+
+- Local Node.js server for development
+- Vercel static hosting for `public/`
+- Vercel serverless function for `/api/*`
+
+---
+
+## Application architecture
+
+```text
+Browser UI (public/)
+        │
+        │ static pages + fetch requests
+        ▼
+Express API (server.js)
+        │
+        ├── accounts and sessions ──► TiDB Cloud
+        ├── note metadata ─────────► TiDB Cloud
+        └── uploaded photos ───────► Cloudinary
+```
+
+The app is intentionally simple:
+
+1. The frontend calls `/api/notes`, `/api/auth/*`, and image endpoints.
+2. Express validates requests, stores note and account records in TiDB, and
+   sends image files to Cloudinary.
+3. Cloudinary stores the image content; TiDB stores the Cloudinary URLs and
+   metadata.
+4. The browser renders note cards and opens a multi-page photo viewer.
+
+---
+
+## Main data model
+
+| Table | Purpose |
+| --- | --- |
+| `users` | Student accounts and password hashes. |
+| `notes` | Subject, title, class date, caption, owner, and primary image data. |
+| `note_photos` | Ordered photo list for multi-page notes. |
+| `session_store` | Login sessions. |
+| `student_notes` | Uploaded image references grouped by student and subject. |
+
+---
+
+## Security and validation
+
+- Passwords are hashed with bcrypt and are never stored in plain text.
+- Login sessions use HTTP-only cookies.
+- Database access uses parameterized SQL queries.
+- Uploads are checked by file signature, not only by file extension.
+- Each image is limited to 8 MB; each note is limited to 8 photos.
+- Delete operations verify `uploader_id` on the server.
+- Security headers are applied to responses.
+- Production sessions require a real `SESSION_SECRET`.
+
+---
+
+## Setup
+
+### 1. Install dependencies
+
+```sh
+npm install
+```
+
+### 2. Configure environment variables
+
+Copy the example file:
 
 ```sh
 cp .env.example .env
 ```
 
-Required values:
+Fill in the required values:
 
-```sh
+```env
 SESSION_SECRET=replace-with-a-long-random-string
+APP_TIMEZONE=Asia/Dhaka
+PORT=5000
 
-TIDB_HOST=your-tidb-cluster-host
+TIDB_HOST=your-tidb-host
 TIDB_PORT=5432
 TIDB_USER=your-tidb-user
 TIDB_PASSWORD=your-tidb-password
-TIDB_DATABASE=your-database-name
+TIDB_DATABASE=postgres
 
 CLOUDINARY_CLOUD_NAME=your-cloud-name
 CLOUDINARY_API_KEY=your-api-key
 CLOUDINARY_API_SECRET=your-api-secret
 ```
 
-Set `TIDB_CA_CERT` only when your TiDB cluster requires a specific CA
-certificate. The app otherwise connects to TiDB with TLS.
-
-For Replit, add the same names and values in **Secrets** instead of creating a
-`.env` file.
-
-## Run the app
-
-Install dependencies and start the development server:
+### 3. Run locally
 
 ```sh
-npm install
 npm run dev
 ```
 
-The app serves on port `5000` unless `PORT` is set. On startup, it creates the
-`users`, `notes`, `note_photos`, `student_notes`, and `session_store` tables
-when they do not already exist.
+Open:
 
-## Deploy on Vercel
+```text
+http://localhost:5000
+```
 
-The `public/` directory is served as static frontend files, and
-`api/[...slug].js` exposes the Express `/api` routes as a Vercel serverless
-function. No build step is required.
+For a normal non-watch run, use:
 
-1. Import the GitHub repository into Vercel.
-2. Add the environment variables from `.env.example` in **Project Settings →
+```sh
+npm start
+```
+
+---
+
+## Vercel deployment
+
+The repository is already structured for Vercel:
+
+- `public/` is deployed as static frontend content.
+- `api/[...slug].js` routes `/api/*` requests to the Express app.
+- No build step is required.
+
+Deployment steps:
+
+1. Import the repository into Vercel.
+2. Add all environment variables from `.env.example` in **Project Settings →
    Environment Variables**.
-3. Deploy.
+3. Omit `PORT` on Vercel; Vercel manages the listening port.
+4. Deploy.
 
-For production, always set a long random `SESSION_SECRET`. Use the TiDB Cloud
-PostgreSQL-compatible credentials (host ending in `pg.tidbcloud.com`, port
-`5432`, user, password, and database) and valid Cloudinary credentials. TiDB
-must be reachable over TLS.
+---
 
-## Try the sample data
+## Demo account
 
-The database is seeded with 14 sample notes: one for every subject today and one
-for every subject the day before. Sample photos are generated note-page images.
-The sample records are added only when the notes table is empty.
-
-Use this demo account to try posting and removing a note:
+A demo student is seeded for local testing:
 
 - Email: `demo@ndcgl.edu.bd`
 - Password: `NdcStudent2026!`
 
-Notes are public to browse. Signing in is required to post a note or remove
-one of your own. A student may share one note per subject per class day. Photo
-uploads accept up to eight JPG, PNG, or WebP files per note, each up to 8 MB,
-and are stored in the `ndc-humanities-gl` Cloudinary folder with automatic
-format and quality.
+The database also seeds sample notes when the `notes` table is empty.
 
-## Project map
+---
 
-- `server.js` — Express routes, TiDB queries, sign-in, Cloudinary photo handling, and sample data.
-- `public/index.html` — Homepage, note library, upload form, and account dialogs.
-- `public/app.js` — Search, date/subject filters, login/signup, upload, and photo viewer interactions.
-- `public/styles.css` — Responsive layout, colors, typography, and component styling.
-- `.env.example` — Documented environment variables for TiDB, Cloudinary, and the app.
+## How this project can scale
 
-## Modify and add pages
+### Near-term improvements
 
-- Adjust the colors, spacing, and mobile layouts in `public/styles.css`.
-- Change the landing page, form fields, or page sections in `public/index.html`;
-  connect new buttons and behavior in `public/app.js`.
-- Update account, upload, and search behavior in the `/api/...` handlers in
-  `server.js`. Validate inputs on the server as well as in browser forms.
-- Add a new page as another HTML file in `public/` (for example,
-  `public/about.html`) and link it from the homepage. Express serves files in
-  this folder automatically.
-- To add a subject, update the subject list in `server.js` and `public/app.js`,
-  review the `subject` columns in the TiDB tables, and add its color in
-  `public/styles.css`.
-- Schema changes are initialized in `server.js`. For an existing TiDB database,
-  apply the corresponding `ALTER TABLE` statements before deploying the app.
+- Add edit support for note titles, captions, subjects, and dates.
+- Let students remove or reorder selected photos before submitting.
+- Add pagination or infinite scrolling for large note collections.
+- Add profile pages showing each student's uploads and contributions.
+- Add dark mode and stronger mobile upload guidance.
+
+### Product scale
+
+- Add class groups or private study circles with invite links.
+- Add comments, reactions, bookmarks, and “helpful” votes.
+- Add teacher or moderator approval for shared notes.
+- Add notifications when new notes are posted for a subject.
+- Add OCR search so handwritten text inside photos can be searched.
+
+### Technical scale
+
+- Add a database migration tool such as Drizzle, Prisma, or node-pg-migrate.
+- Add automated tests for auth, uploads, ownership, and API validation.
+- Add structured logging, error reporting, and request metrics.
+- Add a queue for Cloudinary cleanup and image processing retries.
+- Use CDN caching and signed upload URLs for heavier traffic.
+- Split large uploads into direct browser-to-Cloudinary uploads.
+- Add rate limiting and abuse protection for public sign-up/upload routes.
+
+### Longer-term architecture
+
+- Extract the API into a separate service if the frontend grows.
+- Introduce role-based permissions: student, moderator, teacher, admin.
+- Store audit events for uploads, edits, deletes, and moderation actions.
+- Add background jobs for image thumbnails, OCR, malware scanning, and cleanup.
+- Introduce full-text search in TiDB or a dedicated search service.
+
+---
+
+## Project structure
+
+```text
+.
+├── api/
+│   └── [...slug].js       # Vercel serverless API entrypoint
+├── public/
+│   ├── app.js             # Frontend state, auth, upload, filters, viewer
+│   ├── index.html         # Page structure and dialogs
+│   ├── styles.css         # Responsive design and components
+│   └── favicon.svg
+├── server.js              # Express app, API routes, schema setup
+├── package.json           # Scripts and dependencies
+├── package-lock.json      # Locked dependency versions
+├── .env.example           # Required environment variables
+└── README.md
+```
+
+---
+
+## Development notes
+
+- Keep all SQL statements parameterized.
+- Keep upload validation on the server even when browser validation exists.
+- Never commit `.env` or real credentials.
+- Test login, upload, photo browsing, and delete after changing API routes.
+- `npm run dev` uses Node's watch mode for local development.
+- `npm start` runs the same server without watch mode.
