@@ -206,6 +206,10 @@ Deployment steps:
    Environment Variables**.
 3. Omit `PORT` on Vercel; Vercel manages the listening port.
 4. Deploy.
+5. Open `/api/health` on the deployed site. It returns `"ok": true` when the
+   database is connected. Otherwise it lists missing variables, values wrapped
+   in quotes or spaces, and the database error, without revealing any secrets.
+   After changing variables, redeploy before checking again.
 
 ---
 
