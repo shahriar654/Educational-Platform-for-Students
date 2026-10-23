@@ -192,6 +192,9 @@ npm start
 
 The repository is already structured for Vercel:
 
+- `vercel.json` sets `public/` as the static output, gives API functions up to
+  60 seconds for photo uploads, and applies the app's security headers to
+  static pages.
 - `public/` is deployed as static frontend content.
 - `api/[...slug].js` routes `/api/*` requests to the Express app.
 - No build step is required.
@@ -267,6 +270,7 @@ The database also seeds sample notes when the `notes` table is empty.
 │   ├── styles.css         # Responsive design and components
 │   └── favicon.svg
 ├── server.js              # Express app, API routes, schema setup
+├── vercel.json            # Vercel static output, function, and header config
 ├── package.json           # Scripts and dependencies
 ├── package-lock.json      # Locked dependency versions
 ├── .env.example           # Required environment variables
