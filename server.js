@@ -105,6 +105,7 @@ class TidbSessionStore extends session.Store {
 
 const app = express();
 let databaseReady = Promise.resolve();
+let databaseError = null;
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_IMAGE_SIZE, files: MAX_NOTE_PHOTOS },
@@ -181,7 +182,43 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: "32kb" }));
+const REQUIRED_ENV = [
+  "TIDB_HOST",
+  "TIDB_USER",
+  "TIDB_PASSWORD",
+  "TIDB_DATABASE",
+  "SESSION_SECRET",
+  "CLOUDINARY_CLOUD_NAME",
+  "CLOUDINARY_API_KEY",
+  "CLOUDINARY_API_SECRET",
+];
+
+app.get("/api/health", async (_req, res) => {
+  if (databaseError) initializeDatabase();
+  await databaseReady.catch(() => {});
+  const missing = REQUIRED_ENV.filter((name) => !process.env[name]);
+  const suspicious = REQUIRED_ENV.filter((name) =>
+    /^\s|\s$|^["']|["']$/.test(process.env[name] || ""),
+  );
+  const body = {
+    ok: !databaseError && !missing.length,
+    database: databaseError ? "error" : "connected",
+    missingEnv: missing,
+    envWithQuotesOrSpaces: suspicious,
+    tidb: {
+      port: Number(process.env.TIDB_PORT || 5432),
+      database: process.env.TIDB_DATABASE || null,
+      userHasClusterPrefix: /^[^.]+\.[^.]+$/.test(process.env.TIDB_USER || ""),
+    },
+  };
+  if (databaseError) {
+    body.databaseError = { code: databaseError.code || null, message: databaseError.message };
+  }
+  res.status(body.ok ? 200 : 503).json(body);
+});
+
 app.use("/api", (_req, _res, next) => {
+  if (databaseError) initializeDatabase();
   databaseReady.then(() => next()).catch(next);
 });
 app.use(
@@ -730,6 +767,7 @@ app.use((error, _req, res, _next) => {
 });
 
 function initializeDatabase() {
+  databaseError = null;
   databaseReady = (async () => {
     await pool.query("SELECT 1");
     await pool.query(
@@ -798,7 +836,10 @@ function initializeDatabase() {
   })();
   databaseReady.then(
     () => console.log("Database initialization completed."),
-    (error) => console.error("Database initialization failed:", error.message),
+    (error) => {
+      databaseError = error;
+      console.error("Database initialization failed:", error.message);
+    },
   );
 }
 
