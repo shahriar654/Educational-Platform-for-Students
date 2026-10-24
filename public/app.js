@@ -13,6 +13,7 @@ const MAX_ORIGINAL_PHOTO_BYTES = 25 * 1024 * 1024;
 const MAX_SERVER_PHOTO_BYTES = 8 * 1024 * 1024;
 const ROLE_LABELS = { admin: "Owner", captain: "Captain", student: "Student" };
 
+const isCaptainPage = location.pathname.replace(/\/+$/, "") === "/captain";
 const canUpload = () => ["captain", "admin"].includes(state.user?.role);
 const isAdmin = () => state.user?.role === "admin";
 const canManageNote = (note) => isAdmin()
@@ -89,7 +90,7 @@ function renderUser() {
   );
   if (!state.user) {
     area.innerHTML = "";
-    $("#auth-open").classList.remove("is-hidden");
+    $("#auth-open").classList.toggle("is-hidden", !isCaptainPage);
     return;
   }
   $("#auth-open").classList.add("is-hidden");
@@ -590,6 +591,7 @@ async function init() {
     $("#hero-date").textContent = new Intl.DateTimeFormat("en", { weekday: "short", month: "short", day: "numeric" })
       .format(dateFromIso(state.today)).toUpperCase();
     renderUser();
+    if (isCaptainPage && !state.user) openAuth();
     renderDatePicker();
     renderSubjectPicker();
     updateResultsTitle();

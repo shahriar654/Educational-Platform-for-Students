@@ -11,6 +11,8 @@
   },
   "rewrites": [
     { "source": "/favicon.ico", "destination": "/favicon.svg" },
+    { "source": "/captain", "destination": "/index.html" },
+    { "source": "/captain/", "destination": "/index.html" },
     { "source": "/api/(.*)", "destination": "/api/[...slug]" }
   ],
   "headers": [
