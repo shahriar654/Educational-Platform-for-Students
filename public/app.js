@@ -1,5 +1,5 @@
 const SUBJECTS = ["Bangla", "English", "ICT", "Economics", "History", "Civics", "Geography"];
-const state = { user: null, today: "", date: "", subject: "all", query: "", notes: [], authMode: "login" };
+const state = { user: null, today: "", date: "", subject: "all", query: "", notes: [] };
 const $ = (selector) => document.querySelector(selector);
 const datePicker = $("#date-picker");
 const subjectPicker = $("#subject-picker");
@@ -8,6 +8,15 @@ let searchTimer;
 let toastTimer;
 let photoPreviewUrls = [];
 let selectedPhotoFiles = [];
+const UPLOAD_BUDGET_BYTES = 4.2 * 1024 * 1024;
+const MAX_ORIGINAL_PHOTO_BYTES = 25 * 1024 * 1024;
+const MAX_SERVER_PHOTO_BYTES = 8 * 1024 * 1024;
+const ROLE_LABELS = { admin: "Owner", captain: "Captain", student: "Student" };
+
+const canUpload = () => ["captain", "admin"].includes(state.user?.role);
+const isAdmin = () => state.user?.role === "admin";
+const canManageNote = (note) => isAdmin()
+  || (canUpload() && Number(note.uploader_id) === Number(state.user.id) && !note.is_sample);
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (character) => ({
@@ -75,17 +84,22 @@ function setBusy(button, isBusy, label) {
 
 function renderUser() {
   const area = $("#user-area");
+  document.querySelectorAll(".uploader-only").forEach((element) =>
+    element.classList.toggle("is-hidden", !canUpload()),
+  );
   if (!state.user) {
     area.innerHTML = "";
     $("#auth-open").classList.remove("is-hidden");
-    $("#header-upload").classList.remove("is-hidden");
     return;
   }
   $("#auth-open").classList.add("is-hidden");
   area.innerHTML = `
     <span class="user-avatar" aria-hidden="true">${escapeHtml(state.user.name.slice(0, 1).toUpperCase())}</span>
     <span class="user-name">${escapeHtml(state.user.name.split(" ")[0])}</span>
+    <span class="role-tag">${escapeHtml(ROLE_LABELS[state.user.role] || "Student")}</span>
+    ${isAdmin() ? `<button class="sign-out-button" id="admin-open" type="button">Manage</button>` : ""}
     <button class="sign-out-button" id="sign-out" type="button">Sign out</button>`;
+  $("#admin-open")?.addEventListener("click", openAdmin);
   $("#sign-out").addEventListener("click", async () => {
     try {
       await api("/api/auth/logout", { method: "POST", body: "{}" });
@@ -149,12 +163,12 @@ function updateResultsTitle() {
     ? `Search results${subject}`
     : `${day}’s class notes${subject}`;
   $("#results-subtitle").textContent = state.date === "all" && state.subject === "all"
-    ? "Notes shared by your classmates, all together."
+    ? "Notes shared by your class captains, all together."
     : "A shared notebook, ready when you are.";
 }
 
 function noteCard(note) {
-  const owner = state.user && Number(note.uploader_id) === Number(state.user.id) && !note.is_sample;
+  const owner = canManageNote(note);
   return `<article class="note-card">
     <button class="note-photo-button" type="button" data-note-open="${note.id}" aria-label="Open photo: ${escapeHtml(note.title)}">
       <img class="note-photo" src="/api/notes/${note.id}/image" alt="Photo of ${escapeHtml(note.title)} class notes" loading="lazy" />
@@ -167,7 +181,7 @@ function noteCard(note) {
       <div class="note-card-meta"><span>${escapeHtml(dateForNote(note.lesson_date))}</span><span class="meta-dot">·</span><span>Shared by ${escapeHtml(note.author_name)}</span></div>
       <h4>${escapeHtml(note.title)}</h4>
       ${note.caption ? `<p>${escapeHtml(note.caption)}</p>` : ""}
-      <div class="note-card-footer"><span><i class="mini-spark">✳</i> A classmate’s notes</span>${owner ? `<button type="button" class="delete-note" data-delete-note="${note.id}">Remove</button>` : ""}</div>
+      <div class="note-card-footer"><span><i class="mini-spark">✳</i> Class notes</span>${owner ? `<button type="button" class="delete-note" data-delete-note="${note.id}">Remove</button>` : ""}</div>
     </div>
   </article>`;
 }
@@ -177,10 +191,10 @@ function renderNotes() {
   if (!state.notes.length) {
     notesGrid.innerHTML = `<div class="empty-state">
       <span class="empty-spark">✳</span><h3>No notes here just yet.</h3>
-      <p>Have a page from class? Be the first to share it with your group.</p>
-      <button class="button button-primary" data-empty-upload type="button">Share the first note <span aria-hidden="true">↗</span></button>
+      <p>${canUpload() ? "Have a page from class? Share it with your group." : "Your class captains haven’t shared notes for this day yet."}</p>
+      ${canUpload() ? `<button class="button button-primary" data-empty-upload type="button">Share the first note <span aria-hidden="true">↗</span></button>` : ""}
     </div>`;
-    notesGrid.querySelector("[data-empty-upload]").addEventListener("click", openUpload);
+    notesGrid.querySelector("[data-empty-upload]")?.addEventListener("click", openUpload);
     return;
   }
   notesGrid.innerHTML = state.notes.map(noteCard).join("");
@@ -209,29 +223,19 @@ async function loadNotes() {
   }
 }
 
-function openAuth(mode = "login") {
-  state.authMode = mode;
-  const isSignup = mode === "signup";
-  $("#auth-title").textContent = isSignup ? "Join your study circle." : "Good to have you here.";
-  $("#auth-description").textContent = isSignup
-    ? "Create an account to share a page of your class notes."
-    : "Sign in to share a page of your class notes.";
-  $("#name-field").classList.toggle("is-hidden", !isSignup);
-  $("#auth-name").required = isSignup;
-  $("#auth-password").autocomplete = isSignup ? "new-password" : "current-password";
-  $("#auth-submit").textContent = isSignup ? "Create your account" : "Sign in";
+function openAuth() {
   $("#auth-error").textContent = "";
-  $("#auth-switch").innerHTML = isSignup
-    ? `Already part of the group? <button type="button" data-auth-mode="login">Sign in</button>`
-    : `New to the study library? <button type="button" data-auth-mode="signup">Create an account</button>`;
-  $("#auth-switch").querySelector("[data-auth-mode]").addEventListener("click", (event) => openAuth(event.currentTarget.dataset.authMode));
   $("#auth-dialog").showModal();
 }
 
 function openUpload() {
   if (!state.user) {
-    openAuth("login");
-    showToast("Sign in first to share notes with your classmates.");
+    openAuth();
+    showToast("Only class captains can share notes. Sign in with your captain account.");
+    return;
+  }
+  if (!canUpload()) {
+    showToast("Only class captains can share notes.");
     return;
   }
   $("#upload-error").textContent = "";
@@ -240,6 +244,41 @@ function openUpload() {
   $("#note-subject").value = state.subject === "all" ? SUBJECTS[0] : state.subject;
   resetPhotoPreview();
   $("#upload-dialog").showModal();
+}
+
+async function resizePhoto(file, maxSide, quality) {
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    return file;
+  }
+  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  const context = canvas.getContext("2d");
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+  if (!blob || (blob.size >= file.size && file.size <= MAX_SERVER_PHOTO_BYTES)) return file;
+  return new File([blob], `${file.name.replace(/\.[^.]+$/, "")}.jpg`, {
+    type: "image/jpeg",
+    lastModified: file.lastModified,
+  });
+}
+
+async function compressPhotos(files) {
+  for (const [maxSide, quality] of [[2200, 0.82], [1800, 0.76], [1400, 0.7], [1100, 0.65]]) {
+    const resized = await Promise.all(files.map((file) => resizePhoto(file, maxSide, quality)));
+    const total = resized.reduce((sum, file) => sum + file.size, 0);
+    if (total <= UPLOAD_BUDGET_BYTES && resized.every((file) => file.size <= MAX_SERVER_PHOTO_BYTES)) {
+      return resized;
+    }
+  }
+  throw new Error("These photos are too large to send together. Remove a photo or two and try again.");
 }
 
 function resetPhotoPreview() {
@@ -263,9 +302,9 @@ function setPhotos(files) {
     $("#upload-error").textContent = "Use only JPG, PNG, or WebP photos.";
     return;
   }
-  const oversized = incoming.find((file) => file.size > 8 * 1024 * 1024);
+  const oversized = incoming.find((file) => file.size > MAX_ORIGINAL_PHOTO_BYTES);
   if (oversized) {
-    $("#upload-error").textContent = `${oversized.name} is too large. Each photo can be up to 8 MB.`;
+    $("#upload-error").textContent = `${oversized.name} is too large. Each photo can be up to 25 MB.`;
     return;
   }
   const fileKey = (file) => `${file.name}:${file.size}:${file.lastModified}`;
@@ -300,7 +339,69 @@ async function deleteNote(id, button) {
   try {
     await api(`/api/notes/${id}`, { method: "DELETE" });
     await loadNotes();
-    showToast("Your note has been removed.");
+    showToast("The note has been removed.");
+  } catch (error) {
+    setBusy(button, false);
+    showToast(error.message);
+  }
+}
+
+async function deletePhoto(noteId, photoIndex, button, close) {
+  if (!confirm(`Remove photo ${photoIndex + 1} from this note? This can’t be undone.`)) return;
+  setBusy(button, true, "Removing…");
+  try {
+    await api(`/api/notes/${noteId}/photos/${photoIndex}`, { method: "DELETE" });
+    close();
+    await loadNotes();
+    showToast("The photo has been removed.");
+  } catch (error) {
+    setBusy(button, false);
+    showToast(error.message);
+  }
+}
+
+async function openAdmin() {
+  $("#captain-error").textContent = "";
+  $("#admin-dialog").showModal();
+  await loadAdminUsers();
+}
+
+async function loadAdminUsers() {
+  const list = $("#admin-users");
+  list.innerHTML = `<div class="loading-state"><span class="spinner dark-spinner"></span>Loading accounts…</div>`;
+  try {
+    const { users } = await api("/api/admin/users");
+    list.innerHTML = users.map((user) => `<div class="admin-user">
+      <div class="admin-user-info">
+        <strong>${escapeHtml(user.name)} <span class="role-tag">${escapeHtml(ROLE_LABELS[user.role] || user.role)}</span></strong>
+        <small>${escapeHtml(user.email)} · ${user.note_count} note${user.note_count === 1 ? "" : "s"}</small>
+      </div>
+      ${user.role === "admin" ? "" : `<div class="admin-user-actions">
+        <button class="admin-action" type="button" data-user-role="${user.role === "captain" ? "student" : "captain"}" data-user-id="${user.id}">
+          ${user.role === "captain" ? "Remove captain" : "Make captain"}</button>
+        <button class="admin-action" type="button" data-user-password data-user-id="${user.id}">Reset password</button>
+      </div>`}
+    </div>`).join("") || `<p class="modal-intro">No accounts yet.</p>`;
+    list.querySelectorAll("[data-user-role]").forEach((button) =>
+      button.addEventListener("click", () => updateUser(button, { role: button.dataset.userRole })),
+    );
+    list.querySelectorAll("[data-user-password]").forEach((button) =>
+      button.addEventListener("click", () => {
+        const password = prompt("New password (at least 8 characters):");
+        if (password) updateUser(button, { password });
+      }),
+    );
+  } catch (error) {
+    list.innerHTML = `<p class="form-error">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+async function updateUser(button, changes) {
+  setBusy(button, true, "Saving…");
+  try {
+    await api(`/api/admin/users/${button.dataset.userId}`, { method: "PATCH", body: JSON.stringify(changes) });
+    showToast(changes.password ? "Password updated." : "Account updated.");
+    await loadAdminUsers();
   } catch (error) {
     setBusy(button, false);
     showToast(error.message);
@@ -318,6 +419,7 @@ function openImage(id) {
       ${photoCount > 1 ? `<button class="viewer-nav" type="button" data-viewer-prev aria-label="Previous photo">‹</button>` : ""}
       <span class="viewer-index"></span>
       ${photoCount > 1 ? `<button class="viewer-nav" type="button" data-viewer-next aria-label="Next photo">›</button>` : ""}
+      ${photoCount > 1 && canManageNote(note) ? `<button class="viewer-delete" type="button" data-viewer-delete>Remove this photo</button>` : ""}
     </div>
     <div class="viewer-frame"><img alt="Photo of ${escapeHtml(note.title)} class notes" /></div>
     <div class="viewer-caption"><span>${escapeHtml(note.subject)} · ${escapeHtml(prettyDate(note.lesson_date))}</span><strong>${escapeHtml(note.title)}</strong></div>`;
@@ -339,6 +441,9 @@ function openImage(id) {
     overlay.remove();
   };
   overlay.querySelector(".viewer-close").addEventListener("click", close);
+  overlay.querySelector("[data-viewer-delete]")?.addEventListener("click", (event) =>
+    deletePhoto(note.id, photoIndex, event.currentTarget, close),
+  );
   overlay.addEventListener("click", (event) => {
     if (event.target === overlay) close();
   });
@@ -378,11 +483,6 @@ function bindEvents() {
       if (event.target === dialog) dialog.close();
     });
   });
-  $("#demo-fill").addEventListener("click", () => {
-    $("#auth-email").value = "demo@ndcgl.edu.bd";
-    $("#auth-password").value = "NdcStudent2026!";
-    $("#auth-error").textContent = "";
-  });
   $("#auth-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const button = $("#auth-submit");
@@ -390,7 +490,7 @@ function bindEvents() {
     setBusy(button, true, "One moment…");
     const body = Object.fromEntries(new FormData(event.currentTarget));
     try {
-      const { user } = await api(`/api/auth/${state.authMode === "signup" ? "signup" : "login"}`, {
+      const { user } = await api("/api/auth/login", {
         method: "POST", body: JSON.stringify(body),
       });
       state.user = user;
@@ -408,15 +508,18 @@ function bindEvents() {
     event.preventDefault();
     $("#upload-error").textContent = "";
     const button = $("#upload-submit");
-    setBusy(button, true, "Sharing your note…");
+    const uploadForm = event.currentTarget;
+    setBusy(button, true, "Preparing photos…");
     try {
       if (!selectedPhotoFiles.length) {
         $("#upload-error").textContent = "Choose at least one photo of your class notes.";
         return;
       }
-      const form = new FormData(event.currentTarget);
+      const photos = await compressPhotos(selectedPhotoFiles);
+      button.lastChild.textContent = "Sharing your note…";
+      const form = new FormData(uploadForm);
       form.delete("photos");
-      selectedPhotoFiles.forEach((file) => form.append("photos", file, file.name));
+      photos.forEach((file) => form.append("photos", file, file.name));
       await api("/api/notes", { method: "POST", body: form });
       $("#upload-dialog").close();
       resetPhotoPreview();
@@ -429,6 +532,24 @@ function bindEvents() {
       showToast("Your note is in the study library. Thanks for sharing!");
     } catch (error) {
       $("#upload-error").textContent = error.message;
+    } finally {
+      setBusy(button, false);
+    }
+  });
+  $("#captain-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = $("#captain-submit");
+    const captainForm = event.currentTarget;
+    $("#captain-error").textContent = "";
+    setBusy(button, true, "Adding…");
+    try {
+      const body = Object.fromEntries(new FormData(captainForm));
+      const { user } = await api("/api/admin/users", { method: "POST", body: JSON.stringify(body) });
+      captainForm.reset();
+      showToast(`${user.name} can now sign in and share notes.`);
+      await loadAdminUsers();
+    } catch (error) {
+      $("#captain-error").textContent = error.message;
     } finally {
       setBusy(button, false);
     }

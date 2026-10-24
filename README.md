@@ -21,10 +21,12 @@ set of notes can take longer than the studying itself.
 This project creates one shared study library for the class:
 
 - Every student can browse notes without creating an account.
-- Signed-in students can publish a note for a subject and class date.
+- Only class captains can publish a note for a subject and class date, so the
+  library stays clean and storage doesn't fill up with duplicates.
 - One note can contain up to eight photos, so a lesson can include multiple
   pages.
-- Students can remove their own notes when needed.
+- Captains can remove their own notes; the site owner can remove any note or
+  any single photo.
 - Sample notes make the library useful immediately after setup.
 
 ### Target users
@@ -40,9 +42,10 @@ This project creates one shared study library for the class:
 | Area | What the app does |
 | --- | --- |
 | Browse | Shows class notes by day, subject, and keyword. |
-| Upload | Accepts up to 8 JPG, PNG, or WebP photos per note. |
-| Accounts | Supports student sign-up, login, logout, and persistent sessions. |
-| Ownership | Lets a student delete only the notes they uploaded. |
+| Upload | Captains upload up to 8 JPG, PNG, or WebP photos per note; photos are resized in the browser first. |
+| Accounts | No public sign-up. The owner creates captain accounts; students read without an account. |
+| Roles | Owner (admin), captain, and student, all enforced on the server. |
+| Moderation | The owner can promote/demote captains, reset passwords, and remove any note or photo. |
 | Media delivery | Redirects note images to Cloudinary-hosted optimized URLs. |
 | Deployment | Runs locally as a Node.js server or on Vercel as a serverless app. |
 
@@ -128,7 +131,10 @@ The app is intentionally simple:
 - Database access uses parameterized SQL queries.
 - Uploads are checked by file signature, not only by file extension.
 - Each image is limited to 8 MB; each note is limited to 8 photos.
-- Delete operations verify `uploader_id` on the server.
+- Upload and delete routes check the user's role in the database on every
+  request, so removing a captain takes effect immediately.
+- Delete operations verify `uploader_id` on the server (owners can delete any
+  note).
 - Security headers are applied to responses.
 - Production sessions require a real `SESSION_SECRET`.
 
@@ -166,7 +172,12 @@ TIDB_DATABASE=postgres
 CLOUDINARY_CLOUD_NAME=your-cloud-name
 CLOUDINARY_API_KEY=your-api-key
 CLOUDINARY_API_SECRET=your-api-secret
+
+ADMIN_EMAILS=owner@example.com
 ```
+
+`ADMIN_EMAILS` is a comma-separated list of owner emails. An account with one
+of these emails becomes the owner (admin) when it signs in.
 
 ### 3. Run locally
 
@@ -213,12 +224,26 @@ Deployment steps:
 
 ---
 
-## Demo account
+## Roles and accounts
 
-A demo student is seeded for local testing:
+| Role | Can do |
+| --- | --- |
+| Owner (admin) | Everything a captain can, plus add captains, make/remove captains, reset passwords, and remove any note or single photo. |
+| Captain | Sign in, upload notes, and remove their own notes or photos. |
+| Student | Browse, search, filter, and open notes. No account needed. |
 
-- Email: `demo@ndcgl.edu.bd`
-- Password: `NdcStudent2026!`
+How to manage captains:
+
+1. Set `ADMIN_EMAILS` to the email of your existing account and redeploy.
+2. Sign in with that account and click **Manage** in the header.
+3. Add a captain with a name, email, and password, then share those login
+   details with the captain.
+4. Use **Remove captain** or **Make captain** to change upload access at any
+   time.
+
+There is no public sign-up. Accounts created before this change keep their
+notes but become students, so they can no longer upload until the owner makes
+them captains.
 
 The database also seeds sample notes when the `notes` table is empty.
 
@@ -250,12 +275,12 @@ The database also seeds sample notes when the `notes` table is empty.
 - Add a queue for Cloudinary cleanup and image processing retries.
 - Use CDN caching and signed upload URLs for heavier traffic.
 - Split large uploads into direct browser-to-Cloudinary uploads.
-- Add rate limiting and abuse protection for public sign-up/upload routes.
+- Add rate limiting and abuse protection for login and upload routes.
 
 ### Longer-term architecture
 
 - Extract the API into a separate service if the frontend grows.
-- Introduce role-based permissions: student, moderator, teacher, admin.
+- Extend roles with teachers or per-subject captains.
 - Store audit events for uploads, edits, deletes, and moderation actions.
 - Add background jobs for image thumbnails, OCR, malware scanning, and cleanup.
 - Introduce full-text search in TiDB or a dedicated search service.

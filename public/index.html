@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#f7f8f6" />
     <meta
       name="description"
-      content="Find today's class notes and share your handwritten study notes with NDC Humanities G-L."
+      content="Find every class note shared by the NDC Humanities G-L class captains."
     />
     <title>NDC Humanities G-L — Class notes, together</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -16,8 +16,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20261018" />
-    <script src="/app.js?v=20261018" defer></script>
+    <link rel="stylesheet" href="/styles.css?v=20261024" />
+    <script src="/app.js?v=20261024" defer></script>
   </head>
   <body>
     <header class="topbar">
@@ -34,8 +34,8 @@
       </nav>
       <div class="top-actions">
         <div id="user-area" class="user-area"></div>
-        <button class="button button-quiet" id="auth-open" type="button">Sign in</button>
-        <button class="button button-primary header-upload" id="header-upload" type="button">
+        <button class="button button-quiet" id="auth-open" type="button">Captain sign in</button>
+        <button class="button button-primary header-upload uploader-only is-hidden" id="header-upload" type="button">
           <span class="button-icon" aria-hidden="true">＋</span> Share a note
         </button>
       </div>
@@ -48,10 +48,10 @@
             <span class="eyebrow"><span class="eyebrow-dot"></span> A LITTLE BETTER, EVERY CLASS</span>
             <h1 id="hero-title">Good notes.<br /><span>Better together.</span></h1>
             <p>
-              Find the notes you need, share what you’ve learned, and make every class count.
+              Find the notes you need. Your class captains share every class, so it’s all in one place.
             </p>
             <div class="hero-actions">
-              <button class="button button-primary button-large" id="hero-upload" type="button">
+              <button class="button button-primary button-large uploader-only is-hidden" id="hero-upload" type="button">
                 <span aria-hidden="true">＋</span> Share your notes
               </button>
               <a class="text-link" href="#notes">Explore the library <span aria-hidden="true">↗</span></a>
@@ -60,7 +60,7 @@
               <div class="student-stack" aria-hidden="true">
                 <span>R</span><span>S</span><span>M</span><span>A</span>
               </div>
-              <p><strong>Made by students, for students.</strong><br />Seven subjects, one shared study space.</p>
+              <p><strong>Shared by your class captains.</strong><br />Seven subjects, one shared study space.</p>
             </div>
           </div>
           <div class="hero-art" aria-hidden="true">
@@ -107,7 +107,7 @@
           <div>
             <span class="eyebrow section-eyebrow">THE SHARED STUDY LIBRARY</span>
             <h2 id="library-title">Class notes, <span>all in one place.</span></h2>
-            <p class="section-intro">A little help from your classmates goes a long way.</p>
+            <p class="section-intro">Every class, shared by your captains.</p>
           </div>
           <div class="library-count"><span class="count-spark">✳</span><span id="note-count">Loading notes…</span></div>
         </div>
@@ -137,23 +137,23 @@
 
       <section class="how-section" id="how-it-works">
         <div class="how-copy">
-          <span class="eyebrow section-eyebrow">A SIMPLE WAY TO SHARE</span>
+          <span class="eyebrow section-eyebrow">HOW IT WORKS</span>
           <h2>One class, a whole lot of <span>bright ideas.</span></h2>
-          <p>Snap a clear photo of your notebook and help a classmate see today’s lesson a little differently.</p>
-          <button class="button button-dark" id="how-upload" type="button">Add to the study library <span aria-hidden="true">↗</span></button>
+          <p>Class captains photograph each day’s notes. Everyone else can open the library and study, no account needed.</p>
+          <button class="button button-dark uploader-only is-hidden" id="how-upload" type="button">Add to the study library <span aria-hidden="true">↗</span></button>
         </div>
         <div class="steps">
           <article class="step-card">
             <span class="step-number">01</span><span class="step-illustration step-camera">◉</span>
-            <h3>Snap a page</h3><p>A clear phone photo is all you need. Handwritten notes welcome.</p>
+            <h3>Captains snap a page</h3><p>A clear phone photo of the day’s notes. Photos are resized automatically.</p>
           </article>
           <article class="step-card">
             <span class="step-number">02</span><span class="step-illustration step-organize">▤</span>
-            <h3>Pick a subject</h3><p>Add a title and class date so it’s easy for others to find.</p>
+            <h3>Sorted by subject</h3><p>Each note has a title and class date, so it’s easy to find.</p>
           </article>
           <article class="step-card">
             <span class="step-number">03</span><span class="step-illustration step-share">↗</span>
-            <h3>Share & study</h3><p>Your classmates can browse, read, and learn from your notes.</p>
+            <h3>Everyone studies</h3><p>Browse, search, and open any note. No sign-up needed.</p>
           </article>
         </div>
       </section>
@@ -172,13 +172,9 @@
       <form class="modal-card" id="auth-form">
         <button class="modal-close" type="button" data-close-modal="auth-dialog" aria-label="Close">×</button>
         <span class="modal-mark">✳</span>
-        <p class="eyebrow section-eyebrow">WELCOME TO THE STUDY CIRCLE</p>
-        <h2 id="auth-title">Good to have you here.</h2>
-        <p class="modal-intro" id="auth-description">Sign in to share a page of your class notes.</p>
-        <div id="name-field" class="form-field is-hidden">
-          <label for="auth-name">Your name</label>
-          <input id="auth-name" name="name" type="text" autocomplete="name" maxlength="80" placeholder="e.g. Samira Rahman" />
-        </div>
+        <p class="eyebrow section-eyebrow">FOR CLASS CAPTAINS</p>
+        <h2 id="auth-title">Captain sign in</h2>
+        <p class="modal-intro" id="auth-description">Use the account the site owner made for you. Students don’t need an account to read notes.</p>
         <div class="form-field">
           <label for="auth-email">Email address</label>
           <input id="auth-email" name="email" type="email" autocomplete="email" required placeholder="you@example.com" />
@@ -189,13 +185,6 @@
         </div>
         <p class="form-error" id="auth-error" role="alert"></p>
         <button class="button button-primary modal-submit" id="auth-submit" type="submit">Sign in</button>
-        <p class="auth-switch" id="auth-switch"></p>
-        <div class="demo-login">
-          <strong>Just exploring?</strong>
-          <span>Demo student: <code>demo@ndcgl.edu.bd</code></span>
-          <span>Password: <code>NdcStudent2026!</code></span>
-          <button type="button" id="demo-fill">Use demo account <span aria-hidden="true">↗</span></button>
-        </div>
       </form>
     </dialog>
 
@@ -231,7 +220,7 @@
             <div class="upload-placeholder" id="upload-placeholder">
               <span class="upload-icon">↑</span>
               <strong>Choose photos or drop them here</strong>
-              <small>JPG, PNG or WebP · Up to 8 photos · 8 MB each</small>
+              <small>JPG, PNG or WebP · Up to 8 photos · Resized automatically</small>
             </div>
             <div class="photo-preview-list is-hidden" id="photo-preview-list"></div>
             <p class="photo-selection-hint is-hidden" id="photo-selection-hint"></p>
@@ -241,6 +230,35 @@
         <button class="button button-primary modal-submit" id="upload-submit" type="submit">Share with the class <span aria-hidden="true">↗</span></button>
         <p class="form-footnote">Your name will appear so classmates know who shared it.</p>
       </form>
+    </dialog>
+
+    <dialog id="admin-dialog" class="modal admin-modal">
+      <div class="modal-card admin-card">
+        <button class="modal-close" type="button" data-close-modal="admin-dialog" aria-label="Close">×</button>
+        <p class="eyebrow section-eyebrow">OWNER TOOLS</p>
+        <h2>Manage class captains</h2>
+        <p class="modal-intro">Only captains can share notes. Anyone can read them without an account.</p>
+        <form id="captain-form" class="admin-form">
+          <div class="form-row">
+            <div class="form-field">
+              <label for="captain-name">Name</label>
+              <input id="captain-name" name="name" type="text" required minlength="2" maxlength="80" />
+            </div>
+            <div class="form-field">
+              <label for="captain-email">Email</label>
+              <input id="captain-email" name="email" type="email" required maxlength="254" />
+            </div>
+          </div>
+          <div class="form-field">
+            <label for="captain-password">Password</label>
+            <input id="captain-password" name="password" type="text" required minlength="8" maxlength="100" autocomplete="off" placeholder="At least 8 characters" />
+          </div>
+          <p class="form-error" id="captain-error" role="alert"></p>
+          <button class="button button-primary modal-submit" id="captain-submit" type="submit">Add captain</button>
+        </form>
+        <h3 class="admin-subtitle">Accounts</h3>
+        <div id="admin-users" class="admin-users"></div>
+      </div>
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
