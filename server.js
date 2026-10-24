@@ -25,6 +25,20 @@ const SUBJECTS = [
 ];
 const MAX_IMAGE_SIZE = 8 * 1024 * 1024;
 const MAX_NOTE_PHOTOS = 8;
+const ASSIGNABLE_ROLES = ["student", "captain"];
+const UPLOADER_ROLES = ["captain", "admin"];
+
+function adminEmails() {
+  return (process.env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function withEffectiveRole(user) {
+  const role = adminEmails().includes(user.email.toLowerCase()) ? "admin" : user.role;
+  return { id: user.id, name: user.name, email: user.email, role };
+}
 
 function getDatabaseConfig() {
   const host = process.env.TIDB_HOST;
@@ -210,6 +224,7 @@ app.get("/api/health", async (_req, res) => {
       database: process.env.TIDB_DATABASE || null,
       userHasClusterPrefix: /^[^.]+\.[^.]+$/.test(process.env.TIDB_USER || ""),
     },
+    adminEmailsConfigured: adminEmails().length > 0,
   };
   if (databaseError) {
     body.databaseError = { code: databaseError.code || null, message: databaseError.message };
@@ -259,11 +274,39 @@ function isValidDate(value) {
   return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;
 }
 
-function requireStudent(req, res, next) {
-  if (!req.session.user) {
-    return res.status(401).json({ error: "Sign in to share a class note." });
+async function currentUser(req) {
+  if (!req.session.user) return null;
+  const { rows } = await pool.query(
+    "SELECT id, name, email, role FROM users WHERE id = $1",
+    [req.session.user.id],
+  );
+  return rows[0] ? withEffectiveRole(rows[0]) : null;
+}
+
+function requireRole(roles, deniedMessage) {
+  return async (req, res, next) => {
+    const user = await currentUser(req);
+    if (!user) return res.status(401).json({ error: "Sign in first." });
+    if (!roles.includes(user.role)) return res.status(403).json({ error: deniedMessage });
+    req.user = user;
+    next();
+  };
+}
+
+const requireUploader = requireRole(UPLOADER_ROLES, "Only class captains can share or remove notes.");
+const requireAdmin = requireRole(["admin"], "Only the site owner can do that.");
+
+function accountError({ name, email, password }) {
+  if (name !== undefined && (name.length < 2 || name.length > 80)) {
+    return "Enter a name between 2 and 80 characters.";
   }
-  next();
+  if (email !== undefined && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254)) {
+    return "Enter a valid email address.";
+  }
+  if (password !== undefined && (password.length < 8 || password.length > 100)) {
+    return "The password must be at least 8 characters.";
+  }
+  return null;
 }
 
 function imageFormat(buffer) {
@@ -382,15 +425,6 @@ function makeSamplePage(accent, seed) {
 }
 
 async function seedDemoData() {
-  const demoEmail = "demo@ndcgl.edu.bd";
-  const demoPasswordHash = await bcrypt.hash("NdcStudent2026!", 12);
-  await pool.query(
-    `INSERT INTO users (name, email, password_hash)
-     VALUES ('NDC Demo Student', $1, $2)
-     ON CONFLICT (email) DO NOTHING`,
-    [demoEmail, demoPasswordHash],
-  );
-
   const { rows: counts } = await pool.query("SELECT COUNT(*)::int AS count FROM notes");
   if (counts[0].count > 0) return;
 
@@ -428,39 +462,8 @@ app.get("/api/meta", (_req, res) => {
   res.json({ subjects: SUBJECTS, today: todayInDhaka() });
 });
 
-app.get("/api/auth/me", (req, res) => {
-  res.json({ user: req.session.user || null });
-});
-
-app.post("/api/auth/signup", async (req, res, next) => {
-  try {
-    const name = String(req.body.name || "").trim();
-    const email = String(req.body.email || "").trim().toLowerCase();
-    const password = String(req.body.password || "");
-    if (name.length < 2 || name.length > 80) {
-      return res.status(400).json({ error: "Enter a name between 2 and 80 characters." });
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
-      return res.status(400).json({ error: "Enter a valid email address." });
-    }
-    if (password.length < 8 || password.length > 100) {
-      return res.status(400).json({ error: "Your password must be at least 8 characters." });
-    }
-    const passwordHash = await bcrypt.hash(password, 12);
-    const { rows } = await pool.query(
-      `INSERT INTO users (name, email, password_hash)
-       VALUES ($1, $2, $3)
-       RETURNING id, name, email`,
-      [name, email, passwordHash],
-    );
-    req.session.user = rows[0];
-    res.status(201).json({ user: rows[0] });
-  } catch (error) {
-    if (error.code === "23505") {
-      return res.status(409).json({ error: "An account with that email already exists." });
-    }
-    next(error);
-  }
+app.get("/api/auth/me", async (req, res) => {
+  res.json({ user: await currentUser(req) });
 });
 
 app.post("/api/auth/login", async (req, res, next) => {
@@ -468,7 +471,7 @@ app.post("/api/auth/login", async (req, res, next) => {
     const email = String(req.body.email || "").trim().toLowerCase();
     const password = String(req.body.password || "");
     const { rows } = await pool.query(
-      "SELECT id, name, email, password_hash FROM users WHERE email = $1",
+      "SELECT id, name, email, role, password_hash FROM users WHERE email = $1",
       [email],
     );
     if (!rows[0] || !(await bcrypt.compare(password, rows[0].password_hash))) {
@@ -480,7 +483,7 @@ app.post("/api/auth/login", async (req, res, next) => {
       req.session.user = { id, name, email: userEmail };
       req.session.save((saveError) => {
         if (saveError) return next(saveError);
-        res.json({ user: req.session.user });
+        res.json({ user: withEffectiveRole(rows[0]) });
       });
     });
   } catch (error) {
@@ -580,7 +583,7 @@ app.get("/api/notes/:id/image", (req, res, next) => {
   sendNotePhoto(req, res, next);
 });
 
-app.post("/api/notes", requireStudent, upload.array("photos", MAX_NOTE_PHOTOS), async (req, res, next) => {
+app.post("/api/notes", requireUploader, upload.array("photos", MAX_NOTE_PHOTOS), async (req, res, next) => {
   try {
     const subject = String(req.body.subject || "");
     const title = String(req.body.title || "").trim();
@@ -641,8 +644,8 @@ app.post("/api/notes", requireStudent, upload.array("photos", MAX_NOTE_PHOTOS), 
           lessonDate,
           caption,
           uploadedPhotos[0].mime,
-          req.session.user.id,
-          req.session.user.name,
+          req.user.id,
+          req.user.name,
           uploadedPhotos[0].secureUrl,
           uploadedPhotos[0].publicId,
         ],
@@ -656,7 +659,7 @@ app.post("/api/notes", requireStudent, upload.array("photos", MAX_NOTE_PHOTOS), 
         await client.query(
           `INSERT INTO student_notes (student_name, subject, note_image_url)
            VALUES ($1, $2, $3)`,
-          [req.session.user.name, subject, photo.secureUrl],
+          [req.user.name, subject, photo.secureUrl],
         );
       }
       await client.query("COMMIT");
@@ -684,7 +687,15 @@ app.post("/api/notes", requireStudent, upload.array("photos", MAX_NOTE_PHOTOS), 
   }
 });
 
-app.delete("/api/notes/:id", requireStudent, async (req, res, next) => {
+function noteAccessCondition(user) {
+  return user.role === "admin" ? "TRUE" : "uploader_id = $2 AND is_sample = FALSE";
+}
+
+function noteAccessParams(req, user) {
+  return user.role === "admin" ? [Number(req.params.id)] : [Number(req.params.id), user.id];
+}
+
+app.delete("/api/notes/:id", requireUploader, async (req, res, next) => {
   try {
     if (!/^\d+$/.test(req.params.id)) return res.sendStatus(404);
     const client = await pool.connect();
@@ -694,9 +705,9 @@ app.delete("/api/notes/:id", requireStudent, async (req, res, next) => {
       const { rows } = await client.query(
         `SELECT note_image_url, cloudinary_public_id
          FROM notes
-         WHERE id = $1 AND uploader_id = $2 AND is_sample = FALSE
+         WHERE id = $1 AND ${noteAccessCondition(req.user)}
          FOR UPDATE`,
-        [Number(req.params.id), req.session.user.id],
+        noteAccessParams(req, req.user),
       );
       deletedNote = rows[0];
       if (!deletedNote) {
@@ -734,6 +745,145 @@ app.delete("/api/notes/:id", requireStudent, async (req, res, next) => {
       deletedNote.photoPublicIds.map((publicId) => removeCloudinaryPhoto(publicId)),
     );
     res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/notes/:id/photos/:index", requireUploader, async (req, res, next) => {
+  try {
+    if (!/^\d+$/.test(req.params.id) || !/^\d+$/.test(req.params.index)) {
+      return res.sendStatus(404);
+    }
+    const client = await pool.connect();
+    let removedPhoto;
+    try {
+      await client.query("BEGIN");
+      const { rows: noteRows } = await client.query(
+        `SELECT id FROM notes WHERE id = $1 AND ${noteAccessCondition(req.user)} FOR UPDATE`,
+        noteAccessParams(req, req.user),
+      );
+      if (!noteRows[0]) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "That note is not yours to change." });
+      }
+      const { rows: photos } = await client.query(
+        `SELECT id, image_url, cloudinary_public_id
+         FROM note_photos
+         WHERE note_id = $1
+         ORDER BY position`,
+        [Number(req.params.id)],
+      );
+      removedPhoto = photos[Number(req.params.index)];
+      if (!removedPhoto) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "That photo was not found." });
+      }
+      if (photos.length === 1) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          error: "This is the note’s only photo. Remove the whole note instead.",
+        });
+      }
+      await client.query(
+        `UPDATE notes SET note_image_url = NULL, cloudinary_public_id = NULL
+         WHERE id = $1 AND note_image_url = $2`,
+        [Number(req.params.id), removedPhoto.image_url],
+      );
+      await client.query("DELETE FROM student_notes WHERE note_image_url = $1", [
+        removedPhoto.image_url,
+      ]);
+      await client.query("DELETE FROM note_photos WHERE id = $1", [removedPhoto.id]);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+    if (removedPhoto.cloudinary_public_id) {
+      await removeCloudinaryPhoto(removedPhoto.cloudinary_public_id);
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/admin/users", requireAdmin, async (_req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT users.id, users.name, users.email, users.role, users.created_at,
+              COUNT(notes.id)::int AS note_count
+       FROM users
+       LEFT JOIN notes ON notes.uploader_id = users.id
+       GROUP BY users.id, users.name, users.email, users.role, users.created_at
+       ORDER BY users.created_at DESC`,
+    );
+    res.json({
+      users: rows.map((user) => ({
+        ...withEffectiveRole(user),
+        created_at: user.created_at,
+        note_count: user.note_count,
+      })),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/admin/users", requireAdmin, async (req, res, next) => {
+  try {
+    const name = String(req.body.name || "").trim();
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const password = String(req.body.password || "");
+    const error = accountError({ name, email, password });
+    if (error) return res.status(400).json({ error });
+    const passwordHash = await bcrypt.hash(password, 12);
+    const { rows } = await pool.query(
+      `INSERT INTO users (name, email, password_hash, role)
+       VALUES ($1, $2, $3, 'captain')
+       RETURNING id, name, email, role`,
+      [name, email, passwordHash],
+    );
+    res.status(201).json({ user: withEffectiveRole(rows[0]) });
+  } catch (error) {
+    if (error.code === "23505") {
+      return res.status(409).json({ error: "An account with that email already exists." });
+    }
+    next(error);
+  }
+});
+
+app.patch("/api/admin/users/:id", requireAdmin, async (req, res, next) => {
+  try {
+    if (!/^\d+$/.test(req.params.id)) return res.sendStatus(404);
+    const { rows } = await pool.query("SELECT id, name, email, role FROM users WHERE id = $1", [
+      Number(req.params.id),
+    ]);
+    if (!rows[0]) return res.status(404).json({ error: "That account was not found." });
+    if (withEffectiveRole(rows[0]).role === "admin") {
+      return res.status(400).json({ error: "Owner accounts are set with ADMIN_EMAILS." });
+    }
+    const { role, password } = req.body;
+    if (role !== undefined && !ASSIGNABLE_ROLES.includes(role)) {
+      return res.status(400).json({ error: "Choose captain or student." });
+    }
+    if (password !== undefined) {
+      const error = accountError({ password: String(password) });
+      if (error) return res.status(400).json({ error });
+    }
+    if (role !== undefined) {
+      await pool.query("UPDATE users SET role = $1 WHERE id = $2", [role, rows[0].id]);
+    }
+    if (password !== undefined) {
+      const passwordHash = await bcrypt.hash(String(password), 12);
+      await pool.query("UPDATE users SET password_hash = $1 WHERE id = $2", [
+        passwordHash,
+        rows[0].id,
+      ]);
+    }
+    res.json({ user: withEffectiveRole({ ...rows[0], role: role ?? rows[0].role }) });
   } catch (error) {
     next(error);
   }
@@ -779,6 +929,15 @@ function initializeDatabase() {
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`,
     );
+    const { rows: roleColumn } = await pool.query(
+      `SELECT 1 FROM information_schema.columns
+       WHERE table_name = 'users' AND column_name = 'role'`,
+    );
+    if (!roleColumn.length) {
+      await pool.query(
+        "ALTER TABLE users ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'student'",
+      );
+    }
     await pool.query(
       `CREATE TABLE IF NOT EXISTS notes (
         id SERIAL PRIMARY KEY,
