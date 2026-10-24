@@ -235,9 +235,11 @@ Deployment steps:
 How to manage captains:
 
 1. Set `ADMIN_EMAILS` to the email of your existing account and redeploy.
-2. Sign in with that account and click **Manage** in the header.
+2. Open `/captain` (for example
+   `https://ndc-humanities-g-l.vercel.app/captain`), sign in with that account,
+   and click **Manage** in the header. The public page has no sign-in button.
 3. Add a captain with a name, email, and password, then share those login
-   details with the captain.
+   details and the `/captain` link with the captain.
 4. Use **Remove captain** or **Make captain** to change upload access at any
    time.
 
