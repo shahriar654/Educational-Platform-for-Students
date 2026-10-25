@@ -893,6 +893,10 @@ app.get("/favicon.ico", (_req, res) => {
   res.type("image/svg+xml").sendFile(path.join(__dirname, "public", "favicon.svg"));
 });
 
+app.get(["/captain", "/captain/"], (_req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
 app.use(
   express.static(path.join(__dirname, "public"), {
     maxAge: process.env.NODE_ENV === "production" ? "1h" : 0,
